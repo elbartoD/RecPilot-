@@ -33,16 +33,6 @@
 #include <string>
 #include <vector>
 
-#ifdef __APPLE__
-#include <sys/xattr.h>
-#endif
-
-#include <spawn.h>
-#include <sys/wait.h>
-#include <unistd.h>
-
-extern char **environ;
-
 extern "C" {
 const char *config_get_string(config_t *config, const char *section, const char *name);
 void config_set_string(config_t *config, const char *section, const char *name, const char *value);
@@ -80,7 +70,7 @@ struct MetadataOcrState {
 	bool alive = true;
 };
 
-struct IdClapState {
+struct ClapperboardState {
 	std::mutex mutex;
 	std::future<void> worker;
 	std::string pending_json;
@@ -117,6 +107,7 @@ struct NormalizedRect {
 
 struct CameraTallyFilter {
 	obs_source_t *context = nullptr;
+	obs_source_t *registry_key = nullptr;
 	gs_texrender_t *render = nullptr;
 	gs_stagesurf_t *stage = nullptr;
 	gs_vertbuffer_t *circle = nullptr;
@@ -139,11 +130,10 @@ struct CameraTallyFilter {
 	bool auto_folder_by_camera = true;
 	bool auto_folder_by_card = true;
 	bool metadata_overlay_visible = false;
-	bool metadata_embed_file = false;
 	bool metadata_csv_per_card = false;
 	bool clapperboard_save_snapshots = true;
 	std::string metadata_fields_json = "[]";
-	std::string idclap_target = "clapperboard";
+	std::string clapperboard_target = "clapperboard";
 	int color_r = 255;
 	int color_g = 0;
 	int color_b = 0;
@@ -152,10 +142,10 @@ struct CameraTallyFilter {
 	bool last_auto_detect_center_pending = false;
 	bool auto_detect_clip_name_pending = false;
 	bool last_auto_detect_clip_name_pending = false;
-	bool idclap_pending = false;
-	bool idclap_border_only = false;
-	int idclap_capture_tick = 0;
-	std::vector<FrameSnapshot> idclap_snapshots;
+	bool clapperboard_pending = false;
+	bool clapperboard_border_only = false;
+	int clapperboard_capture_tick = 0;
+	std::vector<FrameSnapshot> clapperboard_snapshots;
 	int auto_detect_band_overlay_frames = 0;
 	int auto_detect_activity_frames = 0;
 	double color_pick_x = 0.5;
@@ -179,7 +169,7 @@ struct CameraTallyFilter {
 	TallyState state = TallyState::Unknown;
 	std::shared_ptr<OcrState> ocr_state = std::make_shared<OcrState>();
 	std::shared_ptr<MetadataOcrState> metadata_ocr_state = std::make_shared<MetadataOcrState>();
-	std::shared_ptr<IdClapState> idclap_state = std::make_shared<IdClapState>();
+	std::shared_ptr<ClapperboardState> clapperboard_state = std::make_shared<ClapperboardState>();
 };
 
 struct RecordingStartRequest {
@@ -188,11 +178,12 @@ struct RecordingStartRequest {
 	bool auto_folder_by_date = true;
 	bool auto_folder_by_camera = true;
 	bool auto_folder_by_card = true;
+	bool csv_per_card = false;
+	std::string metadata_json = "[]";
 };
 
-struct RecordingMetadataRequest {
+struct RecordingExportRequest {
 	std::string clip_name;
-	bool embed_file = false;
 	bool csv_per_card = false;
 	std::string metadata_json = "[]";
 };
@@ -205,7 +196,7 @@ static void refresh_metadata_ocr_once(CameraTallyFilter *filter, const uint8_t *
 std::mutex g_filters_mutex;
 std::unordered_map<obs_source_t *, CameraTallyFilter *> g_filters;
 std::mutex g_pending_rename_mutex;
-RecordingMetadataRequest g_pending_recording_metadata;
+RecordingExportRequest g_current_recording_export;
 std::mutex g_filename_format_mutex;
 std::string g_previous_filename_format;
 bool g_has_previous_filename_format = false;
@@ -711,20 +702,6 @@ static std::vector<std::string> parse_csv_line(const std::string &line)
 	return parse_delimited_line(line, ',');
 }
 
-static std::string sanitize_xattr_key(std::string value)
-{
-	if (value.empty())
-		value = "field";
-	for (char &ch : value) {
-		const unsigned char c = static_cast<unsigned char>(ch);
-		if (!std::isalnum(c) && ch != '_' && ch != '-' && ch != '.')
-			ch = '_';
-	}
-	if (value.size() > 80)
-		value.resize(80);
-	return value;
-}
-
 static std::string sanitize_path_component(std::string value)
 {
 	value = compact_spaces(value);
@@ -751,274 +728,6 @@ static std::vector<MetadataField> metadata_fields_with_values(const std::string 
 			out.push_back(std::move(field));
 	}
 	return out;
-}
-
-static void embed_metadata_xattrs(const std::filesystem::path &file, const std::vector<MetadataField> &fields,
-				  const std::string &json)
-{
-	if (file.empty() || fields.empty())
-		return;
-
-#ifdef __APPLE__
-	const std::string path = file.u8string();
-	for (const MetadataField &field : fields) {
-		if (field.value.empty())
-			continue;
-		const std::string key = "com.recpilot.metadata." + sanitize_xattr_key(field.name);
-		if (setxattr(path.c_str(), key.c_str(), field.value.data(), field.value.size(), 0, 0) != 0)
-			obs_log(LOG_WARNING, "RecPilot could not write xattr metadata '%s' on %s", key.c_str(),
-				path.c_str());
-	}
-	if (!json.empty() && json != "[]") {
-		const char *key = "com.recpilot.metadata_json";
-		if (setxattr(path.c_str(), key, json.data(), json.size(), 0, 0) != 0)
-			obs_log(LOG_WARNING, "RecPilot could not write metadata JSON xattr on %s", path.c_str());
-	}
-#else
-	UNUSED_PARAMETER(file);
-	UNUSED_PARAMETER(fields);
-	UNUSED_PARAMETER(json);
-#endif
-}
-
-static std::filesystem::path find_ffmpeg_path()
-{
-	for (const char *candidate : {"/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"}) {
-		std::filesystem::path path = std::filesystem::u8path(candidate);
-		if (std::filesystem::exists(path))
-			return path;
-	}
-	return {};
-}
-
-static std::filesystem::path find_ffprobe_path()
-{
-	for (const char *candidate : {"/opt/homebrew/bin/ffprobe", "/usr/local/bin/ffprobe", "/usr/bin/ffprobe"}) {
-		std::filesystem::path path = std::filesystem::u8path(candidate);
-		if (std::filesystem::exists(path))
-			return path;
-	}
-	return {};
-}
-
-static bool run_process(const std::vector<std::string> &args)
-{
-	if (args.empty())
-		return false;
-
-	std::vector<char *> argv;
-	argv.reserve(args.size() + 1);
-	for (const std::string &arg : args)
-		argv.push_back(const_cast<char *>(arg.c_str()));
-	argv.push_back(nullptr);
-
-	pid_t pid = 0;
-	const int spawn_status = posix_spawn(&pid, args[0].c_str(), nullptr, nullptr, argv.data(), environ);
-	if (spawn_status != 0)
-		return false;
-
-	int status = 0;
-	if (waitpid(pid, &status, 0) < 0)
-		return false;
-	return WIFEXITED(status) && WEXITSTATUS(status) == 0;
-}
-
-static bool run_process_capture(const std::vector<std::string> &args, std::string &output)
-{
-	output.clear();
-	if (args.empty())
-		return false;
-
-	int pipefd[2] = {-1, -1};
-	if (pipe(pipefd) != 0)
-		return false;
-
-	posix_spawn_file_actions_t actions;
-	posix_spawn_file_actions_init(&actions);
-	posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDOUT_FILENO);
-	posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDERR_FILENO);
-	posix_spawn_file_actions_addclose(&actions, pipefd[0]);
-	posix_spawn_file_actions_addclose(&actions, pipefd[1]);
-
-	std::vector<char *> argv;
-	argv.reserve(args.size() + 1);
-	for (const std::string &arg : args)
-		argv.push_back(const_cast<char *>(arg.c_str()));
-	argv.push_back(nullptr);
-
-	pid_t pid = 0;
-	const int spawn_status = posix_spawn(&pid, args[0].c_str(), &actions, nullptr, argv.data(), environ);
-	posix_spawn_file_actions_destroy(&actions);
-	close(pipefd[1]);
-
-	if (spawn_status != 0) {
-		close(pipefd[0]);
-		return false;
-	}
-
-	char buffer[4096];
-	ssize_t bytes = 0;
-	while ((bytes = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
-		if (output.size() < 8192)
-			output.append(buffer, static_cast<size_t>(bytes));
-	}
-	close(pipefd[0]);
-
-	int status = 0;
-	if (waitpid(pid, &status, 0) < 0)
-		return false;
-	return WIFEXITED(status) && WEXITSTATUS(status) == 0;
-}
-
-static bool add_metadata_pair(std::vector<std::pair<std::string, std::string>> &pairs, const std::string &key,
-			      const std::string &value)
-{
-	const std::string clean_key = compact_spaces(key);
-	const std::string clean_value = compact_spaces(value);
-	if (clean_key.empty() || clean_value.empty())
-		return false;
-	for (const auto &pair : pairs) {
-		if (pair.first == clean_key && pair.second == clean_value)
-			return false;
-	}
-	pairs.emplace_back(clean_key, clean_value);
-	return true;
-}
-
-static void add_resolve_friendly_metadata_aliases(std::vector<std::pair<std::string, std::string>> &pairs,
-						 const std::string &field_name, const std::string &value)
-{
-	const std::string slug = metadata_slug(field_name);
-	add_metadata_pair(pairs, field_name, value);
-	add_metadata_pair(pairs, slug, value);
-	add_metadata_pair(pairs, "com.recpilot." + slug, value);
-
-	if (slug == "clip_name" || slug == "clipname") {
-		add_metadata_pair(pairs, "clip_name", value);
-		add_metadata_pair(pairs, "clip", value);
-		add_metadata_pair(pairs, "title", value);
-		add_metadata_pair(pairs, "com.apple.quicktime.displayname", value);
-	} else if (slug == "reel_name" || slug == "reel") {
-		add_metadata_pair(pairs, "reel_name", value);
-		add_metadata_pair(pairs, "reel", value);
-	} else if (slug == "camera_name" || slug == "camera" || slug == "camera_id" || slug == "camera_index") {
-		add_metadata_pair(pairs, "camera", value);
-		add_metadata_pair(pairs, "camera_name", value);
-		add_metadata_pair(pairs, "camera_id", value);
-	} else if (slug == "scene") {
-		add_metadata_pair(pairs, "scene", value);
-	} else if (slug == "take") {
-		add_metadata_pair(pairs, "take", value);
-	} else if (slug == "timecode" || slug == "tc") {
-		add_metadata_pair(pairs, "timecode", value);
-	} else if (slug == "nd" || slug == "nd_filter" || slug == "neutral_density") {
-		add_metadata_pair(pairs, "nd", value);
-		add_metadata_pair(pairs, "nd_filter", value);
-		add_metadata_pair(pairs, "neutral_density", value);
-	}
-}
-
-static std::vector<std::pair<std::string, std::string>>
-quicktime_metadata_pairs(const std::vector<MetadataField> &fields, const std::string &clip_name, const std::string &json)
-{
-	std::vector<std::pair<std::string, std::string>> pairs;
-	if (!clip_name.empty()) {
-		add_resolve_friendly_metadata_aliases(pairs, "Clip Name", clip_name);
-		add_metadata_pair(pairs, "com.recpilot.clip_name", clip_name);
-	}
-
-	for (const MetadataField &field : fields) {
-		if (field.name.empty() || field.value.empty())
-			continue;
-		add_resolve_friendly_metadata_aliases(pairs, field.name, field.value);
-	}
-
-	std::string summary;
-	for (const MetadataField &field : fields) {
-		if (field.name.empty() || field.value.empty())
-			continue;
-		if (!summary.empty())
-			summary += "; ";
-		summary += field.name + ": " + field.value;
-	}
-	if (!summary.empty()) {
-		add_metadata_pair(pairs, "comment", "RecPilot metadata - " + summary);
-		add_metadata_pair(pairs, "description", summary);
-		add_metadata_pair(pairs, "com.apple.quicktime.description", summary);
-	}
-	if (!json.empty() && json != "[]") {
-		add_metadata_pair(pairs, "com.recpilot.metadata_json", json);
-		add_metadata_pair(pairs, "synopsis", json);
-	}
-	return pairs;
-}
-
-static void verify_quicktime_metadata(const std::filesystem::path &file)
-{
-	const std::filesystem::path ffprobe = find_ffprobe_path();
-	if (ffprobe.empty())
-		return;
-
-	std::string output;
-	const std::vector<std::string> args = {ffprobe.u8string(), "-v", "error", "-show_entries",
-					       "format_tags:stream_tags", "-of", "default=nw=1", file.u8string()};
-	if (!run_process_capture(args, output)) {
-		obs_log(LOG_WARNING, "RecPilot could not verify QuickTime metadata with ffprobe");
-		return;
-	}
-
-	output = trim(output);
-	if (output.size() > 3000)
-		output.resize(3000);
-	obs_log(LOG_INFO, "RecPilot ffprobe metadata verification for %s:\n%s", file.u8string().c_str(),
-		output.empty() ? "(no metadata tags reported)" : output.c_str());
-}
-
-static bool embed_metadata_quicktime(const std::filesystem::path &file, const std::vector<MetadataField> &fields,
-				     const std::string &clip_name, const std::string &json)
-{
-	if (file.empty() || fields.empty() || !std::filesystem::exists(file))
-		return false;
-
-	const std::filesystem::path ffmpeg = find_ffmpeg_path();
-	if (ffmpeg.empty())
-		return false;
-
-	const std::filesystem::path temp =
-		file.parent_path() /
-		std::filesystem::u8path(".recpilot-metadata-" + file.stem().u8string() + file.extension().u8string());
-
-	std::vector<std::string> args = {ffmpeg.u8string(), "-y", "-hide_banner", "-loglevel", "error",
-					 "-i", file.u8string(), "-map", "0", "-c", "copy",
-					 "-movflags", "use_metadata_tags"};
-	for (const auto &metadata : quicktime_metadata_pairs(fields, clip_name, json)) {
-		const std::string pair = metadata.first + "=" + metadata.second;
-		args.push_back("-metadata");
-		args.push_back(pair);
-		args.push_back("-metadata:s:v:0");
-		args.push_back(pair);
-	}
-	args.push_back(temp.u8string());
-
-	try {
-		std::filesystem::remove(temp);
-		if (!run_process(args) || !std::filesystem::exists(temp)) {
-			std::filesystem::remove(temp);
-			return false;
-		}
-
-		std::filesystem::rename(temp, file);
-		obs_log(LOG_INFO, "RecPilot embedded QuickTime metadata into: %s", file.u8string().c_str());
-		verify_quicktime_metadata(file);
-		return true;
-	} catch (const std::exception &ex) {
-		obs_log(LOG_WARNING, "RecPilot could not embed QuickTime metadata: %s", ex.what());
-		try {
-			std::filesystem::remove(temp);
-		} catch (...) {
-		}
-		return false;
-	}
 }
 
 static std::string local_iso8601_now()
@@ -1240,22 +949,18 @@ static void update_zoelog_csv(const std::filesystem::path &file, const std::stri
 	}
 }
 
-static void write_recording_metadata(const std::filesystem::path &file, const RecordingMetadataRequest &request)
+static void write_recording_exports(const std::filesystem::path &file, const RecordingExportRequest &request)
 {
-	if (file.empty() || (!request.embed_file && !request.csv_per_card))
+	if (file.empty() || !request.csv_per_card)
 		return;
 
 	const std::vector<MetadataField> fields = metadata_fields_with_values(request.metadata_json);
 	if (fields.empty()) {
-		obs_log(LOG_INFO, "RecPilot metadata export skipped: no filled metadata fields");
+		obs_log(LOG_INFO, "RecPilot ZoeLog export skipped: no filled metadata fields");
 		return;
 	}
 
-	if (request.embed_file)
-		if (!embed_metadata_quicktime(file, fields, request.clip_name, request.metadata_json))
-			embed_metadata_xattrs(file, fields, request.metadata_json);
-	if (request.csv_per_card)
-		update_zoelog_csv(file, request.clip_name, fields);
+	update_zoelog_csv(file, request.clip_name, fields);
 }
 
 static void apply_automatic_recording_folder(const RecordingStartRequest &request)
@@ -1358,23 +1063,24 @@ static std::string latest_clip_name(CameraTallyFilter *filter)
 	return filter->ocr_state->latest_clip_name;
 }
 
-static RecordingMetadataRequest metadata_request_from_filter(CameraTallyFilter *filter, const std::string &clip_name)
+static RecordingExportRequest export_request_from_filter(CameraTallyFilter *filter, const std::string &clip_name)
 {
-	RecordingMetadataRequest request;
+	RecordingExportRequest request;
 	request.clip_name = clip_name;
 	if (!filter)
 		return request;
 
-	request.embed_file = filter->metadata_embed_file;
 	request.csv_per_card = filter->metadata_csv_per_card;
 	request.metadata_json = filter->metadata_fields_json.empty() ? "[]" : filter->metadata_fields_json;
 	return request;
 }
 
-static void remember_recording_metadata(CameraTallyFilter *filter, const std::string &clip_name)
+static void remember_recording_export(const RecordingStartRequest &request)
 {
 	std::lock_guard<std::mutex> lock(g_pending_rename_mutex);
-	g_pending_recording_metadata = metadata_request_from_filter(filter, clip_name);
+	g_current_recording_export.clip_name = request.clip_name;
+	g_current_recording_export.csv_per_card = request.csv_per_card;
+	g_current_recording_export.metadata_json = request.metadata_json.empty() ? "[]" : request.metadata_json;
 }
 
 static void start_recording_task(void *param)
@@ -1388,6 +1094,8 @@ static void start_recording_task(void *param)
 	}
 	if (!obs_frontend_recording_active()) {
 		ensure_recording_folder_exists();
+		if (request)
+			remember_recording_export(*request);
 		obs_frontend_recording_start();
 	}
 }
@@ -1400,7 +1108,6 @@ static void stop_recording_task(void *)
 
 static void request_recording_start(CameraTallyFilter *filter, const std::string &clip_name = {})
 {
-	remember_recording_metadata(filter, clip_name);
 	auto *request = new RecordingStartRequest();
 	request->clip_name = clip_name;
 	if (filter) {
@@ -1408,6 +1115,9 @@ static void request_recording_start(CameraTallyFilter *filter, const std::string
 		request->auto_folder_by_date = filter->auto_folder_by_date;
 		request->auto_folder_by_camera = filter->auto_folder_by_camera;
 		request->auto_folder_by_card = filter->auto_folder_by_card;
+		const RecordingExportRequest export_request = export_request_from_filter(filter, clip_name);
+		request->csv_per_card = export_request.csv_per_card;
+		request->metadata_json = export_request.metadata_json;
 	}
 	obs_queue_task(OBS_TASK_UI, start_recording_task, request, false);
 }
@@ -1417,23 +1127,18 @@ static void request_recording_stop()
 	obs_queue_task(OBS_TASK_UI, stop_recording_task, nullptr, false);
 }
 
-static void request_recording_metadata_after_stop(CameraTallyFilter *filter, const std::string &clip_name)
-{
-	remember_recording_metadata(filter, clip_name);
-}
-
 static void recording_stopped_event_task(void *)
 {
-	RecordingMetadataRequest metadata;
+	RecordingExportRequest export_request;
 	{
 		std::lock_guard<std::mutex> lock(g_pending_rename_mutex);
-		metadata = std::move(g_pending_recording_metadata);
-		g_pending_recording_metadata = {};
+		export_request = std::move(g_current_recording_export);
+		g_current_recording_export = {};
 	}
-	std::filesystem::path final_path = rename_last_finished_recording(metadata.clip_name);
+	std::filesystem::path final_path = rename_last_finished_recording(export_request.clip_name);
 	if (final_path.empty())
 		final_path = last_finished_recording_path();
-	write_recording_metadata(final_path, metadata);
+	write_recording_exports(final_path, export_request);
 	restore_previous_filename_format();
 }
 
@@ -1832,7 +1537,7 @@ static void apply_color_state(CameraTallyFilter *filter, bool sees_color, const 
 	if (filter->red_frames >= filter->start_frames && filter->state != TallyState::Rolling) {
 		filter->state = TallyState::Rolling;
 		obs_log(LOG_INFO, "RecPilot color detected; starting OBS recording");
-		if (filter->metadata_embed_file || filter->metadata_csv_per_card)
+		if (filter->metadata_csv_per_card)
 			refresh_metadata_ocr_once(filter, data, linesize, width, height);
 		request_recording_start(filter, latest_clip_name(filter));
 	}
@@ -1840,7 +1545,6 @@ static void apply_color_state(CameraTallyFilter *filter, bool sees_color, const 
 	if (filter->non_red_frames >= filter->stop_frames && filter->state == TallyState::Rolling) {
 		filter->state = TallyState::Idle;
 		obs_log(LOG_INFO, "RecPilot color lost; stopping OBS recording");
-		request_recording_metadata_after_stop(filter, latest_clip_name(filter));
 		request_recording_stop();
 	}
 }
@@ -2360,7 +2064,7 @@ static bool has_clapperboard_identity_fields(const std::string &json)
 	return false;
 }
 
-static void add_idclap_field(std::map<std::string, std::string> &fields, const std::string &name,
+static void add_clapperboard_field(std::map<std::string, std::string> &fields, const std::string &name,
 			     std::string value)
 {
 	value = compact_spaces(std::move(value));
@@ -2379,7 +2083,7 @@ static void add_idclap_field(std::map<std::string, std::string> &fields, const s
 		fields[name] = value;
 }
 
-static bool idclap_word_at(const std::string &upper, size_t pos, const std::string &label)
+static bool clapperboard_word_at(const std::string &upper, size_t pos, const std::string &label)
 {
 	if (pos == std::string::npos || pos + label.size() > upper.size())
 		return false;
@@ -2389,21 +2093,21 @@ static bool idclap_word_at(const std::string &upper, size_t pos, const std::stri
 	return left_ok && right_ok;
 }
 
-static size_t idclap_find_label(const std::string &upper, const std::string &label, size_t start = 0)
+static size_t clapperboard_find_label(const std::string &upper, const std::string &label, size_t start = 0)
 {
 	size_t pos = upper.find(label, start);
 	while (pos != std::string::npos) {
-		if (idclap_word_at(upper, pos, label))
+		if (clapperboard_word_at(upper, pos, label))
 			return pos;
 		pos = upper.find(label, pos + 1);
 	}
 	return std::string::npos;
 }
 
-static std::string idclap_value_after_label(const std::string &line, const std::string &upper,
+static std::string clapperboard_value_after_label(const std::string &line, const std::string &upper,
 					    const std::string &label)
 {
-	const size_t pos = idclap_find_label(upper, label);
+	const size_t pos = clapperboard_find_label(upper, label);
 	if (pos == std::string::npos)
 		return {};
 	size_t start = pos + label.size();
@@ -2418,14 +2122,14 @@ static std::string idclap_value_after_label(const std::string &line, const std::
 						     "STOP", "TILT"};
 	size_t end = line.size();
 	for (const std::string &stop : stop_labels) {
-		size_t next = idclap_find_label(upper, stop, start + 1);
+		size_t next = clapperboard_find_label(upper, stop, start + 1);
 		if (next != std::string::npos && next < end)
 			end = next;
 	}
 	return trim(line.substr(start, end - start));
 }
 
-static void idclap_extract_roll_clip(std::map<std::string, std::string> &fields, const std::string &text)
+static void clapperboard_extract_roll_clip(std::map<std::string, std::string> &fields, const std::string &text)
 {
 	const std::string upper = uppercase_ascii(text);
 	for (size_t i = 0; i + 6 < upper.size(); ++i) {
@@ -2441,14 +2145,14 @@ static void idclap_extract_roll_clip(std::map<std::string, std::string> &fields,
 			k++;
 		if (k == j + 1)
 			continue;
-		add_idclap_field(fields, "Camera", upper.substr(i, 1));
-		add_idclap_field(fields, "Roll", upper.substr(i, j - i));
-		add_idclap_field(fields, "Clip", upper.substr(j + 1, k - j - 1));
+		add_clapperboard_field(fields, "Camera", upper.substr(i, 1));
+		add_clapperboard_field(fields, "Roll", upper.substr(i, j - i));
+		add_clapperboard_field(fields, "Clip", upper.substr(j + 1, k - j - 1));
 		return;
 	}
 }
 
-static void idclap_extract_inline_numbers(std::map<std::string, std::string> &fields, const std::string &text)
+static void clapperboard_extract_inline_numbers(std::map<std::string, std::string> &fields, const std::string &text)
 {
 	const std::string upper = uppercase_ascii(text);
 	auto extract_before = [&](const std::string &suffix) -> std::string {
@@ -2465,7 +2169,7 @@ static void idclap_extract_inline_numbers(std::map<std::string, std::string> &fi
 		return trim(text.substr(start, pos - start));
 	};
 	auto extract_after = [&](const std::string &prefix) -> std::string {
-		size_t pos = idclap_find_label(upper, prefix);
+		size_t pos = clapperboard_find_label(upper, prefix);
 		if (pos == std::string::npos)
 			return {};
 		pos += prefix.size();
@@ -2478,23 +2182,23 @@ static void idclap_extract_inline_numbers(std::map<std::string, std::string> &fi
 		return trim(text.substr(pos, end - pos));
 	};
 
-	add_idclap_field(fields, "Color Temp", extract_before("K"));
-	add_idclap_field(fields, "ISO", extract_before("EI"));
-	add_idclap_field(fields, "ISO", extract_after("ISO"));
-	add_idclap_field(fields, "Filters", extract_after("ND"));
-	add_idclap_field(fields, "FPS", extract_after("FPS"));
-	add_idclap_field(fields, "Shutter", extract_after("SHUTTER"));
+	add_clapperboard_field(fields, "Color Temp", extract_before("K"));
+	add_clapperboard_field(fields, "ISO", extract_before("EI"));
+	add_clapperboard_field(fields, "ISO", extract_after("ISO"));
+	add_clapperboard_field(fields, "Filters", extract_after("ND"));
+	add_clapperboard_field(fields, "FPS", extract_after("FPS"));
+	add_clapperboard_field(fields, "Shutter", extract_after("SHUTTER"));
 }
 
-static std::string idclap_fields_json_from_text(const std::string &ocr_text)
+static std::string clapperboard_fields_json_from_text(const std::string &ocr_text)
 {
 	std::map<std::string, std::string> fields;
 	const std::string text = compact_spaces(ocr_text);
 	if (text.empty())
 		return "[]";
 
-	idclap_extract_roll_clip(fields, text);
-	idclap_extract_inline_numbers(fields, text);
+	clapperboard_extract_roll_clip(fields, text);
+	clapperboard_extract_inline_numbers(fields, text);
 
 	size_t start = 0;
 	while (start < ocr_text.size()) {
@@ -2504,26 +2208,26 @@ static std::string idclap_fields_json_from_text(const std::string &ocr_text)
 		const std::string line = compact_spaces(ocr_text.substr(start, end - start));
 		const std::string upper = uppercase_ascii(line);
 		if (!line.empty()) {
-			add_idclap_field(fields, "Slate", idclap_value_after_label(line, upper, "SLATE"));
-			add_idclap_field(fields, "Scene", idclap_value_after_label(line, upper, "SCENE"));
-			add_idclap_field(fields, "Scene", idclap_value_after_label(line, upper, "SC"));
-			add_idclap_field(fields, "Shot", idclap_value_after_label(line, upper, "SHOT"));
-			add_idclap_field(fields, "Take", idclap_value_after_label(line, upper, "TAKE"));
-			add_idclap_field(fields, "Sequence", idclap_value_after_label(line, upper, "SEQUENCE"));
-			add_idclap_field(fields, "Sequence", idclap_value_after_label(line, upper, "SEQ"));
-			add_idclap_field(fields, "Roll", idclap_value_after_label(line, upper, "ROLL"));
-			add_idclap_field(fields, "Roll", idclap_value_after_label(line, upper, "REEL"));
-			add_idclap_field(fields, "Camera", idclap_value_after_label(line, upper, "CAMERA"));
-			add_idclap_field(fields, "Camera", idclap_value_after_label(line, upper, "CAM"));
-			add_idclap_field(fields, "Lens", idclap_value_after_label(line, upper, "LENS"));
-			add_idclap_field(fields, "Filters", idclap_value_after_label(line, upper, "FILTERS"));
-			add_idclap_field(fields, "Filters", idclap_value_after_label(line, upper, "FILTER"));
-			add_idclap_field(fields, "Stop", idclap_value_after_label(line, upper, "STOP"));
-			add_idclap_field(fields, "FPS", idclap_value_after_label(line, upper, "FPS"));
-			add_idclap_field(fields, "Shutter", idclap_value_after_label(line, upper, "SHUTTER"));
-			add_idclap_field(fields, "ISO", idclap_value_after_label(line, upper, "ISO"));
-			add_idclap_field(fields, "ISO", idclap_value_after_label(line, upper, "EI"));
-			add_idclap_field(fields, "Color Temp", idclap_value_after_label(line, upper, "WB"));
+			add_clapperboard_field(fields, "Slate", clapperboard_value_after_label(line, upper, "SLATE"));
+			add_clapperboard_field(fields, "Scene", clapperboard_value_after_label(line, upper, "SCENE"));
+			add_clapperboard_field(fields, "Scene", clapperboard_value_after_label(line, upper, "SC"));
+			add_clapperboard_field(fields, "Shot", clapperboard_value_after_label(line, upper, "SHOT"));
+			add_clapperboard_field(fields, "Take", clapperboard_value_after_label(line, upper, "TAKE"));
+			add_clapperboard_field(fields, "Sequence", clapperboard_value_after_label(line, upper, "SEQUENCE"));
+			add_clapperboard_field(fields, "Sequence", clapperboard_value_after_label(line, upper, "SEQ"));
+			add_clapperboard_field(fields, "Roll", clapperboard_value_after_label(line, upper, "ROLL"));
+			add_clapperboard_field(fields, "Roll", clapperboard_value_after_label(line, upper, "REEL"));
+			add_clapperboard_field(fields, "Camera", clapperboard_value_after_label(line, upper, "CAMERA"));
+			add_clapperboard_field(fields, "Camera", clapperboard_value_after_label(line, upper, "CAM"));
+			add_clapperboard_field(fields, "Lens", clapperboard_value_after_label(line, upper, "LENS"));
+			add_clapperboard_field(fields, "Filters", clapperboard_value_after_label(line, upper, "FILTERS"));
+			add_clapperboard_field(fields, "Filters", clapperboard_value_after_label(line, upper, "FILTER"));
+			add_clapperboard_field(fields, "Stop", clapperboard_value_after_label(line, upper, "STOP"));
+			add_clapperboard_field(fields, "FPS", clapperboard_value_after_label(line, upper, "FPS"));
+			add_clapperboard_field(fields, "Shutter", clapperboard_value_after_label(line, upper, "SHUTTER"));
+			add_clapperboard_field(fields, "ISO", clapperboard_value_after_label(line, upper, "ISO"));
+			add_clapperboard_field(fields, "ISO", clapperboard_value_after_label(line, upper, "EI"));
+			add_clapperboard_field(fields, "Color Temp", clapperboard_value_after_label(line, upper, "WB"));
 		}
 		start = end + 1;
 	}
@@ -2540,7 +2244,7 @@ static std::string idclap_fields_json_from_text(const std::string &ocr_text)
 	return json;
 }
 
-static std::string idclap_fields_json_from_observations(const std::string &observations_json, bool border_only)
+static std::string clapperboard_fields_json_from_observations(const std::string &observations_json, bool border_only)
 {
 	std::string wrapped = "{\"observations\":";
 	wrapped += observations_json.empty() ? "[]" : observations_json;
@@ -2570,7 +2274,7 @@ static std::string idclap_fields_json_from_observations(const std::string &obser
 			continue;
 		}
 
-		const std::string parsed_json = idclap_fields_json_from_text(text);
+		const std::string parsed_json = clapperboard_fields_json_from_text(text);
 		for (MetadataField field : parse_metadata_fields_json(parsed_json)) {
 			if (field.name.empty() || field.value.empty() || seen.find(field.name) != seen.end())
 				continue;
@@ -2620,10 +2324,10 @@ static std::string idclap_fields_json_from_observations(const std::string &obser
 	if (array)
 		obs_data_array_release(array);
 	obs_data_release(root);
-	return idclap_fields_json_from_text(text);
+	return clapperboard_fields_json_from_text(text);
 }
 
-static std::string idclap_crop_json_from_observations(const std::string &observations_json)
+static std::string clapperboard_crop_json_from_observations(const std::string &observations_json)
 {
 	std::string wrapped = "{\"observations\":";
 	wrapped += observations_json.empty() ? "[]" : observations_json;
@@ -3116,8 +2820,10 @@ static void apply_auto_detect_clip_name(CameraTallyFilter *filter, const uint8_t
 		const double center_y = y + box_height * 0.5;
 		const double horizontal_padding = std::max(3.0 / static_cast<double>(width), box_width * 0.04);
 		const double vertical_padding = std::max(3.0 / static_cast<double>(height), box_height * 0.45);
-		const double target_width = std::clamp(box_width + horizontal_padding * 2.0, 0.02, 0.36);
-		const double target_height = std::clamp(box_height + vertical_padding * 2.0, 0.025, 0.10);
+			const double target_width =
+				std::clamp(box_width + horizontal_padding * 2.0, 0.02, REC_PILOT_CLIP_NAME_WIDTH_MAX);
+			const double target_height = std::clamp(box_height + vertical_padding * 2.0, 0.025,
+								REC_PILOT_CLIP_NAME_HEIGHT_MAX);
 		const double target_x = std::clamp(x - horizontal_padding, 0.0, 1.0 - target_width);
 		const double target_y = std::clamp(center_y - target_height * 0.5, 0.0, 1.0 - target_height);
 
@@ -3412,10 +3118,10 @@ static void schedule_metadata_ocr(CameraTallyFilter *filter, const uint8_t *data
 			   });
 }
 
-static void schedule_idclap_ocr(CameraTallyFilter *filter, const uint8_t *data, uint32_t linesize, uint32_t width,
+static void schedule_clapperboard_ocr(CameraTallyFilter *filter, const uint8_t *data, uint32_t linesize, uint32_t width,
 				uint32_t height)
 {
-	if (!filter || !filter->idclap_state)
+	if (!filter || !filter->clapperboard_state)
 		return;
 
 	bool has_ready_json = false;
@@ -3424,87 +3130,87 @@ static void schedule_idclap_ocr(CameraTallyFilter *filter, const uint8_t *data, 
 	std::string ready_image_paths_json;
 	std::string ready_crop_json;
 	{
-		std::lock_guard<std::mutex> lock(filter->idclap_state->mutex);
-		if (filter->idclap_state->worker.valid() &&
-		    filter->idclap_state->worker.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-			filter->idclap_state->worker.get();
-		if (filter->idclap_state->ready) {
+		std::lock_guard<std::mutex> lock(filter->clapperboard_state->mutex);
+		if (filter->clapperboard_state->worker.valid() &&
+		    filter->clapperboard_state->worker.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+			filter->clapperboard_state->worker.get();
+		if (filter->clapperboard_state->ready) {
 			has_ready_json = true;
-			ready_json = std::move(filter->idclap_state->pending_json);
-			ready_image_path = std::move(filter->idclap_state->pending_image_path);
-			ready_image_paths_json = std::move(filter->idclap_state->pending_image_paths_json);
-			ready_crop_json = std::move(filter->idclap_state->pending_crop_json);
-			filter->idclap_state->pending_json.clear();
-			filter->idclap_state->pending_image_path.clear();
-			filter->idclap_state->pending_image_paths_json.clear();
-			filter->idclap_state->pending_crop_json.clear();
-			filter->idclap_state->ready = false;
+			ready_json = std::move(filter->clapperboard_state->pending_json);
+			ready_image_path = std::move(filter->clapperboard_state->pending_image_path);
+			ready_image_paths_json = std::move(filter->clapperboard_state->pending_image_paths_json);
+			ready_crop_json = std::move(filter->clapperboard_state->pending_crop_json);
+			filter->clapperboard_state->pending_json.clear();
+			filter->clapperboard_state->pending_image_path.clear();
+			filter->clapperboard_state->pending_image_paths_json.clear();
+			filter->clapperboard_state->pending_crop_json.clear();
+			filter->clapperboard_state->ready = false;
 		}
 	}
 
 	if (has_ready_json && filter->context) {
 		obs_data_t *settings = obs_source_get_settings(filter->context);
 		if (settings) {
-			obs_data_set_string(settings, "idclap_fields_json", ready_json.c_str());
-			obs_data_set_string(settings, "idclap_image_path", ready_image_path.c_str());
-			obs_data_set_string(settings, "idclap_image_paths_json", ready_image_paths_json.c_str());
-			obs_data_set_string(settings, "idclap_crop_json", ready_crop_json.c_str());
-			obs_data_set_string(settings, "idclap_result", ready_json.empty() || ready_json == "[]" ? "not_found"
+			obs_data_set_string(settings, "clapperboard_fields_json", ready_json.c_str());
+			obs_data_set_string(settings, "clapperboard_image_path", ready_image_path.c_str());
+			obs_data_set_string(settings, "clapperboard_image_paths_json", ready_image_paths_json.c_str());
+			obs_data_set_string(settings, "clapperboard_crop_json", ready_crop_json.c_str());
+			obs_data_set_string(settings, "clapperboard_result", ready_json.empty() || ready_json == "[]" ? "not_found"
 													  : "found");
-			obs_data_set_bool(settings, "idclap_pending", false);
+			obs_data_set_bool(settings, "clapperboard_pending", false);
 			obs_source_update(filter->context, settings);
 			obs_data_release(settings);
 		}
-		filter->idclap_pending = false;
+		filter->clapperboard_pending = false;
 	}
 
-	if (!filter->idclap_pending || !data || width == 0 || height == 0)
+	if (!filter->clapperboard_pending || !data || width == 0 || height == 0)
 		return;
 
 	{
-		std::lock_guard<std::mutex> lock(filter->idclap_state->mutex);
-		if (filter->idclap_state->inflight)
+		std::lock_guard<std::mutex> lock(filter->clapperboard_state->mutex);
+		if (filter->clapperboard_state->inflight)
 			return;
 	}
 
-	const bool save_snapshot = filter->idclap_target == "clapperboard";
+	const bool save_snapshot = filter->clapperboard_target == "clapperboard";
 	if (save_snapshot) {
-		if (filter->idclap_capture_tick == 0 || filter->idclap_capture_tick == 5 || filter->idclap_capture_tick == 10) {
+		if (filter->clapperboard_capture_tick == 0 || filter->clapperboard_capture_tick == 5 || filter->clapperboard_capture_tick == 10) {
 			FrameSnapshot snapshot;
 			snapshot.width = width;
 			snapshot.height = height;
 			if (copy_frame_rgba(data, linesize, width, height, snapshot.pixels))
-				filter->idclap_snapshots.push_back(std::move(snapshot));
+				filter->clapperboard_snapshots.push_back(std::move(snapshot));
 		}
-		filter->idclap_capture_tick++;
-		if (filter->idclap_snapshots.size() < 3 && filter->idclap_capture_tick <= 10)
+		filter->clapperboard_capture_tick++;
+		if (filter->clapperboard_snapshots.size() < 3 && filter->clapperboard_capture_tick <= 10)
 			return;
 	} else {
 		FrameSnapshot snapshot;
 		snapshot.width = width;
 		snapshot.height = height;
 		if (copy_frame_rgba(data, linesize, width, height, snapshot.pixels))
-			filter->idclap_snapshots.push_back(std::move(snapshot));
+			filter->clapperboard_snapshots.push_back(std::move(snapshot));
 	}
 
-	if (filter->idclap_snapshots.empty())
+	if (filter->clapperboard_snapshots.empty())
 		return;
 
 	{
-		std::lock_guard<std::mutex> lock(filter->idclap_state->mutex);
-		if (filter->idclap_state->inflight)
+		std::lock_guard<std::mutex> lock(filter->clapperboard_state->mutex);
+		if (filter->clapperboard_state->inflight)
 			return;
-		filter->idclap_state->inflight = true;
+		filter->clapperboard_state->inflight = true;
 	}
 
-	auto state = filter->idclap_state;
-	const bool border_only = filter->idclap_border_only;
-	std::vector<FrameSnapshot> snapshots = std::move(filter->idclap_snapshots);
-	filter->idclap_snapshots.clear();
-	filter->idclap_capture_tick = 0;
+	auto state = filter->clapperboard_state;
+	const bool border_only = filter->clapperboard_border_only;
+	std::vector<FrameSnapshot> snapshots = std::move(filter->clapperboard_snapshots);
+	filter->clapperboard_snapshots.clear();
+	filter->clapperboard_capture_tick = 0;
 	const std::vector<std::filesystem::path> snapshot_paths =
 		save_snapshot ? clapperboard_snapshot_paths(filter, snapshots.size()) : std::vector<std::filesystem::path>();
-	filter->idclap_state->worker =
+	filter->clapperboard_state->worker =
 		std::async(std::launch::async,
 			   [state, snapshots = std::move(snapshots), snapshot_paths, border_only, save_snapshot]() mutable {
 			std::string fields_json = "[]";
@@ -3534,7 +3240,7 @@ static void schedule_idclap_ocr(CameraTallyFilter *filter, const uint8_t *data, 
 					const std::string observations_json = recognize_text_observations_json_rgba_macos(
 						snapshots[i].pixels, snapshots[i].width, snapshots[i].height);
 					if (crop_json.empty())
-						crop_json = idclap_crop_json_from_observations(observations_json);
+						crop_json = clapperboard_crop_json_from_observations(observations_json);
 					if (save_snapshot && crop_json.empty())
 						crop_json = "{\"x\":0.15,\"y\":0.15,\"width\":0.70,\"height\":0.70}";
 					std::string ocr_observations_json = observations_json;
@@ -3554,7 +3260,7 @@ static void schedule_idclap_ocr(CameraTallyFilter *filter, const uint8_t *data, 
 							}
 						}
 					}
-					const std::string parsed = idclap_fields_json_from_observations(ocr_observations_json, border_only);
+					const std::string parsed = clapperboard_fields_json_from_observations(ocr_observations_json, border_only);
 					if (!parsed.empty() && parsed != "[]" && (!save_snapshot || has_clapperboard_identity_fields(parsed))) {
 						fields_json = parsed;
 						break;
@@ -3584,6 +3290,7 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
 {
 	auto *filter = new CameraTallyFilter;
 	filter->context = source;
+	filter->registry_key = source;
 	obs_data_set_bool(settings, "armed", obs_data_get_bool(settings, "arm_on_launch"));
 
 	obs_enter_graphics();
@@ -3597,7 +3304,7 @@ static void *filter_create(obs_data_t *settings, obs_source_t *source)
 	filter_update(filter, settings);
 	{
 		std::lock_guard<std::mutex> lock(g_filters_mutex);
-		g_filters[source] = filter;
+		g_filters[filter->registry_key] = filter;
 	}
 	return filter;
 }
@@ -3607,7 +3314,7 @@ static void filter_destroy(void *data)
 	auto *filter = static_cast<CameraTallyFilter *>(data);
 	{
 		std::lock_guard<std::mutex> lock(g_filters_mutex);
-		g_filters.erase(filter->context);
+		g_filters.erase(filter->registry_key);
 	}
 	if (filter->ocr_state) {
 		{
@@ -3625,13 +3332,13 @@ static void filter_destroy(void *data)
 		if (filter->metadata_ocr_state->worker.valid())
 			filter->metadata_ocr_state->worker.wait();
 	}
-	if (filter->idclap_state) {
+	if (filter->clapperboard_state) {
 		{
-			std::lock_guard<std::mutex> lock(filter->idclap_state->mutex);
-			filter->idclap_state->alive = false;
+			std::lock_guard<std::mutex> lock(filter->clapperboard_state->mutex);
+			filter->clapperboard_state->alive = false;
 		}
-		if (filter->idclap_state->worker.valid())
-			filter->idclap_state->worker.wait();
+		if (filter->clapperboard_state->worker.valid())
+			filter->clapperboard_state->worker.wait();
 	}
 
 	obs_enter_graphics();
@@ -3669,13 +3376,12 @@ static void filter_update(void *data, obs_data_t *settings)
 	filter->auto_folder_by_camera = obs_data_get_bool(settings, "auto_folder_by_camera");
 	filter->auto_folder_by_card = obs_data_get_bool(settings, "auto_folder_by_card");
 	filter->metadata_overlay_visible = obs_data_get_bool(settings, "metadata_overlay_visible");
-	filter->metadata_embed_file = obs_data_get_bool(settings, "metadata_embed_file");
 	filter->metadata_csv_per_card = obs_data_get_bool(settings, "metadata_csv_per_card");
 	filter->clapperboard_save_snapshots = obs_data_get_bool(settings, "clapperboard_save_snapshots");
 	const char *metadata_fields = obs_data_get_string(settings, "metadata_fields_json");
 	filter->metadata_fields_json = metadata_fields ? metadata_fields : "[]";
-	const char *idclap_target = obs_data_get_string(settings, "idclap_target");
-	filter->idclap_target = idclap_target && *idclap_target ? idclap_target : "clapperboard";
+	const char *clapperboard_target = obs_data_get_string(settings, "clapperboard_target");
+	filter->clapperboard_target = clapperboard_target && *clapperboard_target ? clapperboard_target : "clapperboard";
 	if (filter->ocr_spaces_to_underscores && filter->ocr_remove_spaces)
 		filter->ocr_remove_spaces = false;
 	filter->color_r = static_cast<int>(obs_data_get_int(settings, "color_r"));
@@ -3692,8 +3398,8 @@ static void filter_update(void *data, obs_data_t *settings)
 	if (filter->auto_detect_clip_name_pending && !filter->last_auto_detect_clip_name_pending)
 		filter->auto_detect_band_overlay_frames = 150;
 	filter->last_auto_detect_clip_name_pending = filter->auto_detect_clip_name_pending;
-	filter->idclap_pending = obs_data_get_bool(settings, "idclap_pending");
-	filter->idclap_border_only = obs_data_get_bool(settings, "idclap_border_only");
+	filter->clapperboard_pending = obs_data_get_bool(settings, "clapperboard_pending");
+	filter->clapperboard_border_only = obs_data_get_bool(settings, "clapperboard_border_only");
 	filter->color_pick_x = obs_data_get_double(settings, "color_pick_x");
 	filter->color_pick_y = obs_data_get_double(settings, "color_pick_y");
 	filter->center_x = obs_data_get_double(settings, "center_x");
@@ -3701,8 +3407,10 @@ static void filter_update(void *data, obs_data_t *settings)
 	filter->radius = obs_data_get_double(settings, "radius");
 	filter->ocr_x = obs_data_get_double(settings, "ocr_x");
 	filter->ocr_y = obs_data_get_double(settings, "ocr_y");
-	filter->ocr_width = obs_data_get_double(settings, "ocr_width");
-	filter->ocr_height = obs_data_get_double(settings, "ocr_height");
+	filter->ocr_width =
+		std::clamp(obs_data_get_double(settings, "ocr_width"), 0.0, REC_PILOT_CLIP_NAME_WIDTH_MAX);
+	filter->ocr_height =
+		std::clamp(obs_data_get_double(settings, "ocr_height"), 0.0, REC_PILOT_CLIP_NAME_HEIGHT_MAX);
 	filter->red_threshold = obs_data_get_double(settings, "red_threshold");
 	filter->red_coverage = obs_data_get_double(settings, "red_coverage");
 	filter->start_frames = static_cast<int>(obs_data_get_int(settings, "start_frames"));
@@ -3743,7 +3451,6 @@ static void filter_defaults(obs_data_t *settings)
 	obs_data_set_default_bool(settings, "auto_folder_by_camera", true);
 	obs_data_set_default_bool(settings, "auto_folder_by_card", true);
 	obs_data_set_default_bool(settings, "metadata_overlay_visible", false);
-	obs_data_set_default_bool(settings, "metadata_embed_file", false);
 	obs_data_set_default_bool(settings, "metadata_csv_per_card", false);
 	obs_data_set_default_bool(settings, "clapperboard_save_snapshots", true);
 	obs_data_set_default_string(settings, "metadata_fields_json", "[]");
@@ -3760,14 +3467,14 @@ static void filter_defaults(obs_data_t *settings)
 	obs_data_set_default_bool(settings, "auto_detect_clip_name_pending", false);
 	obs_data_set_default_string(settings, "auto_detect_clip_name_result", "");
 	obs_data_set_default_string(settings, "auto_detect_clip_name_detail", "");
-	obs_data_set_default_bool(settings, "idclap_pending", false);
-	obs_data_set_default_bool(settings, "idclap_border_only", false);
-	obs_data_set_default_string(settings, "idclap_target", "clapperboard");
-	obs_data_set_default_string(settings, "idclap_result", "");
-	obs_data_set_default_string(settings, "idclap_fields_json", "[]");
-	obs_data_set_default_string(settings, "idclap_image_path", "");
-	obs_data_set_default_string(settings, "idclap_image_paths_json", "[]");
-	obs_data_set_default_string(settings, "idclap_crop_json", "");
+	obs_data_set_default_bool(settings, "clapperboard_pending", false);
+	obs_data_set_default_bool(settings, "clapperboard_border_only", false);
+	obs_data_set_default_string(settings, "clapperboard_target", "clapperboard");
+	obs_data_set_default_string(settings, "clapperboard_result", "");
+	obs_data_set_default_string(settings, "clapperboard_fields_json", "[]");
+	obs_data_set_default_string(settings, "clapperboard_image_path", "");
+	obs_data_set_default_string(settings, "clapperboard_image_paths_json", "[]");
+	obs_data_set_default_string(settings, "clapperboard_crop_json", "");
 	obs_data_set_default_double(settings, "color_pick_x", 0.5);
 	obs_data_set_default_double(settings, "color_pick_y", 0.5);
 	obs_data_set_default_double(settings, "center_x", 0.08);
@@ -4088,7 +3795,7 @@ static void filter_render(void *data, gs_effect_t *effect)
 				apply_auto_detect_clip_name(filter, pixels, linesize, width, height);
 				schedule_ocr(filter, pixels, linesize, width, height);
 				schedule_metadata_ocr(filter, pixels, linesize, width, height);
-				schedule_idclap_ocr(filter, pixels, linesize, width, height);
+				schedule_clapperboard_ocr(filter, pixels, linesize, width, height);
 				gs_stagesurface_unmap(filter->stage);
 			}
 	}
@@ -4133,20 +3840,9 @@ void camera_tally_start_recording_with_clip_name(obs_source_t *source)
 	request_recording_start(filter, clip_name);
 }
 
-void camera_tally_stop_recording_with_metadata(obs_source_t *source)
+void camera_tally_stop_recording(obs_source_t *source)
 {
-	std::string clip_name;
-	CameraTallyFilter *filter = nullptr;
-	{
-		std::lock_guard<std::mutex> lock(g_filters_mutex);
-		auto it = g_filters.find(source);
-		if (it != g_filters.end()) {
-			filter = it->second;
-			clip_name = latest_clip_name(it->second);
-		}
-	}
-
-	request_recording_metadata_after_stop(filter, clip_name);
+	UNUSED_PARAMETER(source);
 	request_recording_stop();
 }
 
@@ -4175,27 +3871,27 @@ static void camera_tally_request_clap_ocr(obs_source_t *source, const char *targ
 		return;
 
 	auto *filter = it->second;
-	filter->idclap_pending = true;
-	filter->idclap_border_only = border_only;
-	filter->idclap_target = target ? target : "clapperboard";
-	filter->idclap_capture_tick = 0;
-	filter->idclap_snapshots.clear();
+	filter->clapperboard_pending = true;
+	filter->clapperboard_border_only = border_only;
+	filter->clapperboard_target = target ? target : "clapperboard";
+	filter->clapperboard_capture_tick = 0;
+	filter->clapperboard_snapshots.clear();
 	obs_data_t *settings = obs_source_get_settings(filter->context);
 	if (!settings)
 		return;
-	obs_data_set_bool(settings, "idclap_pending", true);
-	obs_data_set_bool(settings, "idclap_border_only", border_only);
-	obs_data_set_string(settings, "idclap_target", filter->idclap_target.c_str());
-	obs_data_set_string(settings, "idclap_result", "waiting");
-	obs_data_set_string(settings, "idclap_fields_json", "[]");
-	obs_data_set_string(settings, "idclap_image_path", "");
-	obs_data_set_string(settings, "idclap_image_paths_json", "[]");
-	obs_data_set_string(settings, "idclap_crop_json", "");
+	obs_data_set_bool(settings, "clapperboard_pending", true);
+	obs_data_set_bool(settings, "clapperboard_border_only", border_only);
+	obs_data_set_string(settings, "clapperboard_target", filter->clapperboard_target.c_str());
+	obs_data_set_string(settings, "clapperboard_result", "waiting");
+	obs_data_set_string(settings, "clapperboard_fields_json", "[]");
+	obs_data_set_string(settings, "clapperboard_image_path", "");
+	obs_data_set_string(settings, "clapperboard_image_paths_json", "[]");
+	obs_data_set_string(settings, "clapperboard_crop_json", "");
 	obs_source_update(filter->context, settings);
 	obs_data_release(settings);
 }
 
-void camera_tally_request_clapboard(obs_source_t *source)
+void camera_tally_request_clapperboard(obs_source_t *source)
 {
 	camera_tally_request_clap_ocr(source, "clapperboard", false);
 }

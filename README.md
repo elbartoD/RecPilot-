@@ -1,59 +1,49 @@
-# OBS Plugin Template
+# RecPilot
 
-## Introduction
+RecPilot is a native OBS Studio plugin for camera-recording workflows. It watches a camera overlay inside the video image, controls OBS recording, names clips from OCR, generates ZoeLog-compatible CSV metadata, and helps capture clapperboard snapshots.
 
-The plugin template is meant to be used as a starting point for OBS Studio plugin development. It includes:
+## Current Features
 
-* Boilerplate plugin source code
-* A CMake project file
-* GitHub Actions workflows and repository actions
+- REC trigger from a selected tally/detection center in the video image.
+- One-click selection for the detection center, clip name box, and metadata OCR boxes.
+- Auto-detection for the detection center, testing red, green, then the selected custom color.
+- Clip name OCR with optional cleanup rules.
+- Automatic recording folders by date, camera, and card.
+- ZoeLog CSV per card for Silverstack/Pomfort import.
+- Metadata OCR fields with visible green dashed detection boxes in the Metadata page.
+- Presets for detection center, clip name, and metadata fields.
+- Clapperboard snapshots, preview crop, loupe, pan, and 90 degree rotation.
+- Multilingual dock UI, including the Minion easter egg.
+- Ko-fi support dialog and reminder logic.
 
-## Supported Build Environments
+## Metadata Strategy
 
-| Platform  | Tool   |
-|-----------|--------|
-| Windows   | Visual Studio 17 2022 |
-| macOS     | XCode 16.0 |
-| Windows, macOS  | CMake 3.30.5 |
-| Ubuntu 24.04 | CMake 3.28.3 |
-| Ubuntu 24.04 | `ninja-build` |
-| Ubuntu 24.04 | `pkg-config`
-| Ubuntu 24.04 | `build-essential` |
+The production metadata path is ZoeLog CSV per card.
 
-## Quick Start
+Direct metadata embedding into MOV/MP4 files was intentionally removed. Generic FFmpeg/QuickTime tags and macOS extended attributes were not reliable enough for Resolve or Silverstack workflows. Future in-file metadata support should be treated as a separate R&D track around real QuickTime/camera metadata atoms.
 
-An absolute bare-bones [Quick Start Guide](https://github.com/obsproject/obs-plugintemplate/wiki/Quick-Start-Guide) is available in the wiki.
+## OBS Setup
 
-## Documentation
+1. Add the camera capture source in OBS.
+2. Add the `RecPilot` filter to that source.
+3. Open the RecPilot dock.
+4. Configure Detection Center, Clip Name, automatic folders, and Metadata.
+5. Arm RecPilot or enable arm-on-launch.
 
-All documentation can be found in the [Plugin Template Wiki](https://github.com/obsproject/obs-plugintemplate/wiki).
+## Local Build
 
-Suggested reading to get up and running:
+Use the macOS preset from the plugin directory:
 
-* [Getting started](https://github.com/obsproject/obs-plugintemplate/wiki/Getting-Started)
-* [Build system requirements](https://github.com/obsproject/obs-plugintemplate/wiki/Build-System-Requirements)
-* [Build system options](https://github.com/obsproject/obs-plugintemplate/wiki/CMake-Build-System-Options)
+```bash
+cmake --preset macos
+cmake --build --preset macos
+```
 
-## GitHub Actions & CI
+The project is based on the OBS plugin template, but this repository is now the RecPilot product codebase. The original template remote is kept as `upstream`; the RecPilot GitHub repository is `origin`.
 
-Default GitHub Actions workflows are available for the following repository actions:
+## Known Limits
 
-* `push`: Run for commits or tags pushed to `master` or `main` branches.
-* `pr-pull`: Run when a Pull Request has been pushed or synchronized.
-* `dispatch`: Run when triggered by the workflow dispatch in GitHub's user interface.
-* `build-project`: Builds the actual project and is triggered by other workflows.
-* `check-format`: Checks CMake and plugin source code formatting and is triggered by other workflows.
-
-The workflows make use of GitHub repository actions (contained in `.github/actions`) and build scripts (contained in `.github/scripts`) which are not needed for local development, but might need to be adjusted if additional/different steps are required to build the plugin.
-
-### Retrieving build artifacts
-
-Successful builds on GitHub Actions will produce build artifacts that can be downloaded for testing. These artifacts are commonly simple archives and will not contain package installers or installation programs.
-
-### Building a Release
-
-To create a release, an appropriately named tag needs to be pushed to the `main`/`master` branch using semantic versioning (e.g., `12.3.4`, `23.4.5-beta2`). A draft release will be created on the associated repository with generated installer packages or installation programs attached as release artifacts.
-
-## Signing and Notarizing on macOS
-
-Basic concepts of codesigning and notarization on macOS are explained in the correspodning [Wiki article](https://github.com/obsproject/obs-plugintemplate/wiki/Codesigning-On-macOS) which has a specific section for the [GitHub Actions setup](https://github.com/obsproject/obs-plugintemplate/wiki/Codesigning-On-macOS#setting-up-code-signing-for-github-actions).
+- The plugin changes OBS recording settings for folder, codec, filename format, and output resolution. Those changes are now blocked while OBS is actively recording, streaming, or replay-buffering.
+- ZoeLog import quality depends on Silverstack matching options and on clip naming consistency.
+- Clapperboard detection is heuristic and should remain manually adjustable through crop pan, zoom/full view, and rotation.
+- The source is still concentrated in two large files; the next refactor should split recording control, ZoeLog export, OCR, clapperboard detection, and dock pages into smaller modules.

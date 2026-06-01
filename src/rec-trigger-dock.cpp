@@ -444,12 +444,9 @@ public:
 		auto *metadataLayout = new QVBoxLayout(metadataPage);
 		metadataLayout->setContentsMargins(0, 0, 0, 0);
 		metadataLayout->setSpacing(8);
-		metadataEmbedInFile = new QCheckBox("Embed in recording file");
-		metadataCsvPerCard = new QCheckBox("ZoeLog CSV per card");
-		tagText(metadataEmbedInFile, "Embed in recording file");
-		tagText(metadataCsvPerCard, "ZoeLog CSV per card");
-		metadataLayout->addWidget(metadataEmbedInFile);
-		metadataLayout->addWidget(metadataCsvPerCard);
+			metadataCsvPerCard = new QCheckBox("ZoeLog CSV per card");
+			tagText(metadataCsvPerCard, "ZoeLog CSV per card");
+			metadataLayout->addWidget(metadataCsvPerCard);
 		metadataAutoDetectButton = new QPushButton("Auto-detect metadata");
 		tagText(metadataAutoDetectButton, "Auto-detect metadata");
 		metadataLayout->addWidget(metadataAutoDetectButton);
@@ -468,10 +465,10 @@ public:
 		metadataLayout->addWidget(addMetadataFieldButton);
 		sections->addWidget(metadataPage);
 
-		auto *clapboardPage = new QWidget();
-		auto *clapboardLayout = new QVBoxLayout(clapboardPage);
-		clapboardLayout->setContentsMargins(0, 0, 0, 0);
-		clapboardLayout->setSpacing(8);
+		auto *clapperboardPage = new QWidget();
+		auto *clapperboardLayout = new QVBoxLayout(clapperboardPage);
+		clapperboardLayout->setContentsMargins(0, 0, 0, 0);
+		clapperboardLayout->setSpacing(8);
 		auto *clapperboardPreviewRow = new QHBoxLayout();
 		clapperboardPreviewRow->setContentsMargins(0, 0, 0, 0);
 		clapperboardPreviewRow->setSpacing(8);
@@ -515,7 +512,7 @@ public:
 		});
 		snapshotControls->addStretch();
 		clapperboardPreviewRow->addLayout(snapshotControls);
-		clapboardLayout->addLayout(clapperboardPreviewRow);
+		clapperboardLayout->addLayout(clapperboardPreviewRow);
 
 		clapperboardLoupe = new QLabel(this, Qt::ToolTip);
 		clapperboardLoupe->setObjectName("ClapperboardLoupe");
@@ -528,20 +525,20 @@ public:
 		clapHint->setObjectName("Status");
 		clapHint->setWordWrap(true);
 		tagText(clapHint, "Clapperboard OCR fills these fields from the current image.");
-		clapboardLayout->addWidget(clapHint);
+		clapperboardLayout->addWidget(clapHint);
 		auto *clapScroll = new QScrollArea();
 		clapScroll->setWidgetResizable(true);
 		clapScroll->setFrameShape(QFrame::NoFrame);
 		auto *clapContainer = new QWidget();
-		clapboardFieldsLayout = new QGridLayout(clapContainer);
-		clapboardFieldsLayout->setContentsMargins(0, 0, 0, 0);
-		clapboardFieldsLayout->setHorizontalSpacing(8);
-		clapboardFieldsLayout->setVerticalSpacing(8);
+		clapperboardFieldsLayout = new QGridLayout(clapContainer);
+		clapperboardFieldsLayout->setContentsMargins(0, 0, 0, 0);
+		clapperboardFieldsLayout->setHorizontalSpacing(8);
+		clapperboardFieldsLayout->setVerticalSpacing(8);
 		for (const QString &field : clapperboardFieldSuggestions())
-			addClapboardFieldRow(field);
+			addClapperboardPageFieldRow(field);
 		clapScroll->setWidget(clapContainer);
-		clapboardLayout->addWidget(clapScroll, 1);
-		sections->addWidget(clapboardPage);
+		clapperboardLayout->addWidget(clapScroll, 1);
+		sections->addWidget(clapperboardPage);
 
 			root->addWidget(panel, 1);
 
@@ -558,11 +555,11 @@ public:
 			tagText(coffeeButton, "Ko-fi");
 			dockFooter->addWidget(coffeeButton, 0, Qt::AlignLeft);
 			dockFooter->addStretch();
-			idClapButton = new QPushButton();
-			idClapButton->setIcon(clapIcon());
-			idClapButton->setIconSize(QSize(24, 24));
-			idClapButton->setToolTip("Clapperboard");
-			dockFooter->addWidget(idClapButton, 0, Qt::AlignCenter);
+			clapperboardButton = new QPushButton();
+			clapperboardButton->setIcon(clapIcon());
+			clapperboardButton->setIconSize(QSize(24, 24));
+			clapperboardButton->setToolTip("Clapperboard");
+			dockFooter->addWidget(clapperboardButton, 0, Qt::AlignCenter);
 			dockFooter->addStretch();
 			languageButton = new QPushButton("🇬🇧 English");
 			tagText(languageButton, "Language");
@@ -586,10 +583,8 @@ public:
 			setBlocked(armedButton, value);
 			updateTopToggleButtons();
 		});
-		connect(metadataEmbedInFile, &QCheckBox::toggled, this,
-			[this](bool value) { setBool("metadata_embed_file", value); });
-		connect(metadataCsvPerCard, &QCheckBox::toggled, this,
-			[this](bool value) { setBool("metadata_csv_per_card", value); });
+			connect(metadataCsvPerCard, &QCheckBox::toggled, this,
+				[this](bool value) { setBool("metadata_csv_per_card", value); });
 		connect(clapperboardSaveSnapshots, &QCheckBox::toggled, this,
 			[this](bool value) { setBool("clapperboard_save_snapshots", value); });
 		connect(metadataAutoDetectButton, &QPushButton::clicked, this, [this]() { requestMetadataAutoDetect(); });
@@ -633,7 +628,7 @@ public:
 			applyLanguage();
 		});
 		connect(coffeeButton, &QPushButton::clicked, this, [this]() { showCoffeeDialog(); });
-		connect(idClapButton, &QPushButton::clicked, this, [this]() { requestClapboard(); });
+		connect(clapperboardButton, &QPushButton::clicked, this, [this]() { requestClapperboard(); });
 		connect(ocrOToZero, &QCheckBox::toggled, this, [this](bool value) { setBool("ocr_o_to_zero", value); });
 		connect(ocrSpacesToUnderscores, &QCheckBox::toggled, this,
 			[this](bool value) { setSpaceMode(value, ocrRemoveSpaces && ocrRemoveSpaces->isChecked()); });
@@ -770,7 +765,7 @@ private:
 		QPushButton *fineTuneToggle = nullptr;
 		QWidget *fineTunePanel = nullptr;
 		QPushButton *coffeeButton = nullptr;
-		QPushButton *idClapButton = nullptr;
+		QPushButton *clapperboardButton = nullptr;
 		QPushButton *languageButton = nullptr;
 	QCheckBox *ocrOToZero = nullptr;
 	QCheckBox *ocrSpacesToUnderscores = nullptr;
@@ -798,15 +793,14 @@ private:
 	QCheckBox *autoFolderByCamera = nullptr;
 	QCheckBox *autoFolderByCard = nullptr;
 	QCheckBox *clapperboardSaveSnapshots = nullptr;
-	QCheckBox *metadataEmbedInFile = nullptr;
-	QCheckBox *metadataCsvPerCard = nullptr;
+		QCheckBox *metadataCsvPerCard = nullptr;
 	QPushButton *metadataAutoDetectButton = nullptr;
 	QPushButton *addMetadataFieldButton = nullptr;
 	QWidget *metadataFieldsContainer = nullptr;
 	QVBoxLayout *metadataFieldsLayout = nullptr;
 	std::vector<MetadataFieldRow *> metadataRows;
-	QGridLayout *clapboardFieldsLayout = nullptr;
-	std::vector<std::pair<QString, QLineEdit *>> clapboardRows;
+	QGridLayout *clapperboardFieldsLayout = nullptr;
+	std::vector<std::pair<QString, QLineEdit *>> clapperboardRows;
 	QLabel *clapperboardPreview = nullptr;
 	QLabel *clapperboardLoupe = nullptr;
 	QPixmap clapperboardPreviewPixmap;
@@ -1008,8 +1002,7 @@ private:
 		setBlocked(autoFolderByCamera, obs_data_get_bool(settings, "auto_folder_by_camera"));
 		setBlocked(autoFolderByCard, obs_data_get_bool(settings, "auto_folder_by_card"));
 		setBlocked(clapperboardSaveSnapshots, obs_data_get_bool(settings, "clapperboard_save_snapshots"));
-		setBlocked(metadataEmbedInFile, obs_data_get_bool(settings, "metadata_embed_file"));
-		setBlocked(metadataCsvPerCard, obs_data_get_bool(settings, "metadata_csv_per_card"));
+			setBlocked(metadataCsvPerCard, obs_data_get_bool(settings, "metadata_csv_per_card"));
 		loadMetadataRowsFromSettings(settings);
 		const bool metadataVisible = isMetadataSectionActive();
 		if (obs_data_get_bool(settings, "metadata_overlay_visible") != metadataVisible) {
@@ -1062,7 +1055,7 @@ private:
 		setClipNameText(currentClip);
 		readAutoDetectResult(settings);
 		readAutoDetectClipNameResult(settings);
-		readIdClapResult(settings);
+		readClapperboardResult(settings);
 
 		obs_data_release(settings);
 	}
@@ -1154,32 +1147,32 @@ private:
 		}
 	}
 
-	void readIdClapResult(obs_data_t *settings)
+	void readClapperboardResult(obs_data_t *settings)
 	{
 		if (!settings)
 			return;
 
-		const char *raw = obs_data_get_string(settings, "idclap_result");
+		const char *raw = obs_data_get_string(settings, "clapperboard_result");
 		const QString result = raw ? QString::fromUtf8(raw) : QString();
 		if (result.isEmpty() || result == "waiting")
 			return;
 
-		const char *jsonRaw = obs_data_get_string(settings, "idclap_fields_json");
+		const char *jsonRaw = obs_data_get_string(settings, "clapperboard_fields_json");
 		const QByteArray json = jsonRaw ? QByteArray(jsonRaw) : QByteArray();
-		const char *targetRaw = obs_data_get_string(settings, "idclap_target");
+		const char *targetRaw = obs_data_get_string(settings, "clapperboard_target");
 		const QString target = targetRaw ? QString::fromUtf8(targetRaw) : QString("clapperboard");
-		const char *imageRaw = obs_data_get_string(settings, "idclap_image_path");
+		const char *imageRaw = obs_data_get_string(settings, "clapperboard_image_path");
 		const QString imagePath = imageRaw ? QString::fromUtf8(imageRaw).trimmed() : QString();
-		const char *imagePathsRaw = obs_data_get_string(settings, "idclap_image_paths_json");
+		const char *imagePathsRaw = obs_data_get_string(settings, "clapperboard_image_paths_json");
 		const QByteArray imagePathsJson = imagePathsRaw ? QByteArray(imagePathsRaw) : QByteArray("[]");
-		const char *cropRaw = obs_data_get_string(settings, "idclap_crop_json");
+		const char *cropRaw = obs_data_get_string(settings, "clapperboard_crop_json");
 		const QByteArray cropJson = cropRaw ? QByteArray(cropRaw) : QByteArray();
 
-		obs_data_set_string(settings, "idclap_result", "");
-		obs_data_set_string(settings, "idclap_fields_json", "[]");
-		obs_data_set_string(settings, "idclap_image_path", "");
-		obs_data_set_string(settings, "idclap_image_paths_json", "[]");
-		obs_data_set_string(settings, "idclap_crop_json", "");
+		obs_data_set_string(settings, "clapperboard_result", "");
+		obs_data_set_string(settings, "clapperboard_fields_json", "[]");
+		obs_data_set_string(settings, "clapperboard_image_path", "");
+		obs_data_set_string(settings, "clapperboard_image_paths_json", "[]");
+		obs_data_set_string(settings, "clapperboard_crop_json", "");
 		obs_source_update(filter, settings);
 
 		if (target != "metadata") {
@@ -1194,7 +1187,7 @@ private:
 		}
 
 		if (result == "found") {
-			const int count = target == "metadata" ? applyIdClapFields(json) : applyClapboardFields(json);
+			const int count = target == "metadata" ? applyClapperboardFields(json) : applyClapperboardPageFields(json);
 			if (count > 0) {
 				setTemporaryStatus(
 					QString("%1 %2")
@@ -1438,12 +1431,12 @@ private:
 		return {"Camera", "Scene", "Shot", "Take", "Sequence", "Slate"};
 	}
 
-	void addClapboardFieldRow(const QString &name)
+	void addClapperboardPageFieldRow(const QString &name)
 	{
-		if (!clapboardFieldsLayout)
+		if (!clapperboardFieldsLayout)
 			return;
 
-		const int index = static_cast<int>(clapboardRows.size());
+		const int index = static_cast<int>(clapperboardRows.size());
 		const int column = index % 4;
 		const int rowIndex = (index / 4) * 2;
 		auto *value = new QLineEdit();
@@ -1455,12 +1448,12 @@ private:
 		auto *label = new QLabel(name);
 		label->setAlignment(Qt::AlignCenter);
 		label->setObjectName("Status");
-		clapboardFieldsLayout->addWidget(value, rowIndex, column);
-		clapboardFieldsLayout->addWidget(label, rowIndex + 1, column);
-		clapboardRows.emplace_back(name, value);
+		clapperboardFieldsLayout->addWidget(value, rowIndex, column);
+		clapperboardFieldsLayout->addWidget(label, rowIndex + 1, column);
+		clapperboardRows.emplace_back(name, value);
 	}
 
-	int applyClapboardFields(const QByteArray &json)
+	int applyClapperboardPageFields(const QByteArray &json)
 	{
 		const QJsonDocument doc = QJsonDocument::fromJson(json);
 		if (!doc.isArray())
@@ -1474,7 +1467,7 @@ private:
 			const QString fieldValue = object.value("value").toString().trimmed();
 			if (name.isEmpty() || fieldValue.isEmpty())
 				continue;
-			for (auto &row : clapboardRows) {
+			for (auto &row : clapperboardRows) {
 				if (row.first.compare(name, Qt::CaseInsensitive) != 0 || !row.second)
 					continue;
 				row.second->setText(fieldValue);
@@ -1487,7 +1480,7 @@ private:
 		if (touched.find("camera") == touched.end()) {
 			const QString camera = currentCameraLetterFromClipName();
 			if (!camera.isEmpty()) {
-				for (auto &row : clapboardRows) {
+				for (auto &row : clapperboardRows) {
 					if (row.first.compare("Camera", Qt::CaseInsensitive) == 0 && row.second) {
 						row.second->setText(camera);
 						applied++;
@@ -1687,7 +1680,7 @@ private:
 		return metadataRows.empty() ? nullptr : metadataRows.back();
 	}
 
-	int applyIdClapFields(const QByteArray &json)
+	int applyClapperboardFields(const QByteArray &json)
 	{
 		const QJsonDocument doc = QJsonDocument::fromJson(json);
 		if (!doc.isArray())
@@ -1862,9 +1855,10 @@ private:
 			{"By date", "Par date"},
 			{"By camera", "Par caméra"},
 			{"By card", "Par carte"},
-			{"Recording codec", "Codec d'enregistrement"},
-			{"Recording resolution", "Résolution d'enregistrement"},
-			{"Embed in recording file", "Intégrer au fichier enregistré"},
+				{"Recording codec", "Codec d'enregistrement"},
+				{"Recording resolution", "Résolution d'enregistrement"},
+				{"Recording settings are locked while OBS is active.",
+				 "Les réglages d'enregistrement sont verrouillés pendant qu'OBS est actif."},
 				{"ZoeLog CSV per card", "CSV ZoeLog par carte"},
 			{"Add metadata field", "Ajouter un champ metadata"},
 			{"Manual value or OCR result", "Valeur manuelle ou résultat OCR"},
@@ -1972,9 +1966,9 @@ private:
 			{"By date", "Par date-banana"},
 			{"By camera", "Par cam-cam"},
 			{"By card", "Par carte-bello"},
-			{"Recording codec", "Codec rec-bap"},
-			{"Recording resolution", "Résolushun"},
-			{"Embed in recording file", "Mettre dans fichier rec"},
+				{"Recording codec", "Codec rec-bap"},
+				{"Recording resolution", "Résolushun"},
+				{"Recording settings are locked while OBS is active.", "Réglages rec dodo pendant OBS actif."},
 				{"ZoeLog CSV per card", "CSV ZoeLog par carte-banana"},
 			{"Add metadata field", "Ajouter meta-banana"},
 			{"Manual value or OCR result", "Valeur main ou OCR-bello"},
@@ -2079,8 +2073,8 @@ private:
 				recordingFolderPath->setPlaceholderText(trText("OBS default folder"));
 			if (coffeeButton)
 				coffeeButton->setToolTip(trText("Support RecPilot"));
-			if (idClapButton)
-				idClapButton->setToolTip(trText("Clapperboard"));
+			if (clapperboardButton)
+				clapperboardButton->setToolTip(trText("Clapperboard"));
 			if (languageButton) {
 			if (language == DockLanguage::Minion) {
 				languageButton->setIcon(yellowBuddyIcon());
@@ -2573,6 +2567,12 @@ private:
 
 	void chooseRecordingFolder()
 	{
+		if (recordingSettingsLocked()) {
+			setTemporaryStatus(trText("Recording settings are locked while OBS is active."), 4);
+			loadRecordingFolder();
+			return;
+		}
+
 		const QString startDir = currentRecordingFolder().isEmpty() ? QDir::homePath()
 									    : currentRecordingFolder();
 		const QString folder =
@@ -2807,16 +2807,21 @@ private:
 
 	static void resetVideoIfIdle()
 	{
-		if (obs_frontend_recording_active() || obs_frontend_streaming_active() ||
-		    obs_frontend_replay_buffer_active())
+		if (recordingSettingsLocked())
 			return;
 
 		obs_frontend_reset_video();
 	}
 
+	static bool recordingSettingsLocked()
+	{
+		return obs_frontend_recording_active() || obs_frontend_streaming_active() ||
+		       obs_frontend_replay_buffer_active();
+	}
+
 	static void updateRecordingOutputIfIdle(config_t *config)
 	{
-		if (!config || obs_frontend_recording_active())
+		if (!config || recordingSettingsLocked())
 			return;
 
 		obs_output_t *output = obs_frontend_get_recording_output();
@@ -2846,6 +2851,11 @@ private:
 			return;
 		if (!recordingOutputUpdatesReady) {
 			pendingRecordingCodecApply = true;
+			return;
+		}
+		if (recordingSettingsLocked()) {
+			setTemporaryStatus(trText("Recording settings are locked while OBS is active."), 4);
+			loadRecordingCodec();
 			return;
 		}
 
@@ -2893,6 +2903,11 @@ private:
 	{
 		if (!recordingResolution || index < 0)
 			return;
+		if (recordingSettingsLocked()) {
+			setTemporaryStatus(trText("Recording settings are locked while OBS is active."), 4);
+			loadRecordingResolution();
+			return;
+		}
 
 		config_t *config = obs_frontend_get_profile_config();
 		if (!config)
@@ -2988,7 +3003,7 @@ private:
 	void toggleRecording()
 	{
 		if (obs_frontend_recording_active())
-			camera_tally_stop_recording_with_metadata(filter);
+			camera_tally_stop_recording(filter);
 		else if (filter)
 			camera_tally_start_recording_with_clip_name(filter);
 		else
@@ -3088,7 +3103,7 @@ private:
 		refreshTarget();
 	}
 
-	void requestClapboard()
+	void requestClapperboard()
 	{
 		if (!filter)
 			return;
@@ -3102,9 +3117,9 @@ private:
 		pickMode = PickMode::None;
 		hidePreviewPickHint();
 		removePreviewPickEventFilters();
-		camera_tally_request_clapboard(filter);
+		camera_tally_request_clapperboard(filter);
 		setTemporaryStatus(trText("Clapperboard reading clap..."), 4);
-		QTimer::singleShot(10000, this, [this]() { resolveIdClapTimeout(); });
+		QTimer::singleShot(10000, this, [this]() { resolveClapperboardTimeout(); });
 	}
 
 	void requestMetadataAutoDetect()
@@ -3117,10 +3132,10 @@ private:
 		removePreviewPickEventFilters();
 		camera_tally_request_metadata_auto_detect(filter);
 		setTemporaryStatus(trText("Auto-detect metadata requested..."), 4);
-		QTimer::singleShot(10000, this, [this]() { resolveIdClapTimeout(); });
+		QTimer::singleShot(10000, this, [this]() { resolveClapperboardTimeout(); });
 	}
 
-	void resolveIdClapTimeout()
+	void resolveClapperboardTimeout()
 	{
 		if (!filter)
 			return;
@@ -3129,11 +3144,11 @@ private:
 		if (!settings)
 			return;
 
-		const char *raw = obs_data_get_string(settings, "idclap_result");
+		const char *raw = obs_data_get_string(settings, "clapperboard_result");
 		const QString result = raw ? QString::fromUtf8(raw) : QString();
 		if (result == "waiting") {
-			obs_data_set_bool(settings, "idclap_pending", false);
-			obs_data_set_string(settings, "idclap_result", "no_frame");
+			obs_data_set_bool(settings, "clapperboard_pending", false);
+			obs_data_set_string(settings, "clapperboard_result", "no_frame");
 			obs_source_update(filter, settings);
 		}
 
@@ -3742,12 +3757,12 @@ private:
 
 	static double clipNameWidthMax()
 	{
-		return 0.25;
+		return REC_PILOT_CLIP_NAME_WIDTH_MAX;
 	}
 
 	static double clipNameHeightMax()
 	{
-		return 0.15;
+		return REC_PILOT_CLIP_NAME_HEIGHT_MAX;
 	}
 
 	static double radiusStoredToDisplay(double storedValue)
