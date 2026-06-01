@@ -23,6 +23,12 @@ endif()
 
 if(ENABLE_QT)
   find_package(Qt6 COMPONENTS Widgets Core)
+  if(TARGET WrapOpenGL::WrapOpenGL)
+    # Qt's OBS dependency bundle still advertises the removed macOS AGL framework
+    # through WrapOpenGL. Xcode 26 no longer ships AGL, while QtGui already links
+    # OpenGL directly, so keep the stale compatibility target empty.
+    set_target_properties(WrapOpenGL::WrapOpenGL PROPERTIES INTERFACE_LINK_LIBRARIES "")
+  endif()
   target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets)
   target_compile_options(
     ${CMAKE_PROJECT_NAME}
@@ -34,6 +40,28 @@ if(ENABLE_QT)
   )
 endif()
 
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/plugin-main.c)
+target_sources(
+  ${CMAKE_PROJECT_NAME}
+  PRIVATE src/camera-tally-filter.cpp src/plugin-main.cpp src/rec-trigger-dock.cpp
+)
+
+target_add_resource(${CMAKE_PROJECT_NAME} data/kofi_logo.png)
+
+if(APPLE)
+  target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/macos-ocr.mm)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE "-framework Foundation" "-framework CoreGraphics" "-framework Vision")
+else()
+  target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/macos-ocr-stub.cpp)
+endif()
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
+
+add_custom_command(
+  TARGET ${CMAKE_PROJECT_NAME}
+  POST_BUILD
+  COMMAND
+    "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/data/kofi_logo.png"
+    "$<TARGET_BUNDLE_DIR:${CMAKE_PROJECT_NAME}>/Contents/Resources/kofi_logo.png"
+  COMMENT "Copy Ko-fi logo into plugin resources"
+  VERBATIM
+)
