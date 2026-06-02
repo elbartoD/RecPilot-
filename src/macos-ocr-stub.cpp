@@ -15,8 +15,8 @@ bool save_rgba_jpeg_macos(const std::vector<uint8_t> &, uint32_t, uint32_t, cons
 	return false;
 }
 
-bool recognize_clip_name_box_rgba_macos(const std::vector<uint8_t> &, uint32_t, uint32_t, double &, double &,
-					double &, double &, std::string &)
+bool recognize_clip_name_box_rgba_macos(const std::vector<uint8_t> &, uint32_t, uint32_t, double &, double &, double &,
+					double &, std::string &)
 {
 	return false;
 }

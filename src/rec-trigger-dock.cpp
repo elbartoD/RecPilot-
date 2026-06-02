@@ -7,8 +7,9 @@
 #include <graphics/matrix4.h>
 #include <graphics/vec3.h>
 
-#include <QCheckBox>
 #include <QAbstractButton>
+#include <QAbstractScrollArea>
+#include <QCheckBox>
 #include <QColor>
 #include <QColorDialog>
 #include <QComboBox>
@@ -147,6 +148,19 @@ constexpr std::array<DetectionPreset, 6> BUILTIN_PRESETS = {{
 	{"Phantom Flex 4K - top left REC", 0.035, 0.065, 0.026, 0.005, 0.820, 0.110, 0.070},
 }};
 
+static QScrollArea *makePageScroll(QWidget *page)
+{
+	auto *scroll = new QScrollArea();
+	scroll->setWidgetResizable(true);
+	scroll->setFrameShape(QFrame::NoFrame);
+	scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	scroll->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
+	scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
+	scroll->setMinimumHeight(0);
+	scroll->setWidget(page);
+	return scroll;
+}
+
 class RecTriggerDock final : public QWidget {
 public:
 	RecTriggerDock()
@@ -213,6 +227,8 @@ public:
 
 		auto *panel = new QFrame();
 		panel->setObjectName("Panel");
+		panel->setMinimumHeight(0);
+		panel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
 		auto *panelLayout = new QVBoxLayout(panel);
 		panelLayout->setContentsMargins(10, 10, 10, 10);
 		panelLayout->setSpacing(8);
@@ -227,7 +243,8 @@ public:
 		panelLayout->addWidget(sectionPicker);
 
 		sections = new QStackedWidget();
-		sections->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+		sections->setMinimumHeight(0);
+		sections->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
 		panelLayout->addWidget(sections, 1);
 
 		auto *generalPage = new QWidget();
@@ -311,7 +328,7 @@ public:
 		generalLayout->addLayout(recordingResolutionRow);
 
 		generalLayout->addStretch();
-		sections->addWidget(generalPage);
+		sections->addWidget(makePageScroll(generalPage));
 
 		auto *detectionPage = new QWidget();
 		auto *detectionLayout = new QVBoxLayout(detectionPage);
@@ -363,7 +380,8 @@ public:
 		detectionLayout->addWidget(fineTunePanel);
 		autoDetectCenterButton = new QPushButton("Auto detect circle");
 		tagText(autoDetectCenterButton, "Auto detect circle");
-		autoDetectCenterButton->setToolTip("Analyze the current image and place detection on the selected color circle");
+		autoDetectCenterButton->setToolTip(
+			"Analyze the current image and place detection on the selected color circle");
 		detectionLayout->addWidget(autoDetectCenterButton);
 		selectCenterButton = new QPushButton("  Select in one click");
 		tagText(selectCenterButton, "Select in one click");
@@ -375,15 +393,7 @@ public:
 		addDoubleControl(detectionLayout, "Detection center Y", centerY, "center_y", 0.0, 100.0, 0.1, 1);
 		addDoubleControl(detectionLayout, "Detection radius", radius, "radius", 0.0, 100.0, 1.0, 0);
 		detectionLayout->addStretch();
-		auto *detectionScroll = new QScrollArea();
-		detectionScroll->setWidgetResizable(true);
-		detectionScroll->setFrameShape(QFrame::NoFrame);
-		detectionScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-		detectionScroll->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
-		detectionScroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
-		detectionScroll->setMinimumHeight(0);
-		detectionScroll->setWidget(detectionPage);
-		sections->addWidget(detectionScroll);
+		sections->addWidget(makePageScroll(detectionPage));
 
 		auto *clipPage = new QWidget();
 		auto *clipLayout = new QVBoxLayout(clipPage);
@@ -406,14 +416,15 @@ public:
 		tagText(selectClipNameButton, "Select in one click");
 		selectClipNameButton->setIcon(cursorIcon());
 		selectClipNameButton->setIconSize(QSize(22, 22));
-		selectClipNameButton->setToolTip("Click, then choose the center of the clip name text in the main OBS preview");
+		selectClipNameButton->setToolTip(
+			"Click, then choose the center of the clip name text in the main OBS preview");
 		clipLayout->addWidget(selectClipNameButton);
-			addDoubleControl(clipLayout, "Clip name X", ocrX, "ocr_x", 0.0, 1.0, 0.001, 3);
-			addDoubleControl(clipLayout, "Clip name Y", ocrY, "ocr_y", 0.0, 1.0, 0.001, 3);
+		addDoubleControl(clipLayout, "Clip name X", ocrX, "ocr_x", 0.0, 1.0, 0.001, 3);
+		addDoubleControl(clipLayout, "Clip name Y", ocrY, "ocr_y", 0.0, 1.0, 0.001, 3);
 		addDoubleControl(clipLayout, "Clip name width", ocrWidth, "ocr_width", 0.0, 100.0, 1.0, 0);
 		addDoubleControl(clipLayout, "Clip name height", ocrHeight, "ocr_height", 0.0, 100.0, 1.0, 0);
 		clipLayout->addStretch();
-		sections->addWidget(clipPage);
+		sections->addWidget(makePageScroll(clipPage));
 
 		auto *presetPage = new QWidget();
 		auto *presetLayout = new QVBoxLayout(presetPage);
@@ -438,15 +449,15 @@ public:
 		presetHint->setWordWrap(true);
 		presetLayout->addWidget(presetHint);
 		presetLayout->addStretch();
-		sections->addWidget(presetPage);
+		sections->addWidget(makePageScroll(presetPage));
 
 		auto *metadataPage = new QWidget();
 		auto *metadataLayout = new QVBoxLayout(metadataPage);
 		metadataLayout->setContentsMargins(0, 0, 0, 0);
 		metadataLayout->setSpacing(8);
-			metadataCsvPerCard = new QCheckBox("ZoeLog CSV per card");
-			tagText(metadataCsvPerCard, "ZoeLog CSV per card");
-			metadataLayout->addWidget(metadataCsvPerCard);
+		metadataCsvPerCard = new QCheckBox("ZoeLog CSV per card");
+		tagText(metadataCsvPerCard, "ZoeLog CSV per card");
+		metadataLayout->addWidget(metadataCsvPerCard);
 		metadataAutoDetectButton = new QPushButton("Auto-detect metadata");
 		tagText(metadataAutoDetectButton, "Auto-detect metadata");
 		metadataLayout->addWidget(metadataAutoDetectButton);
@@ -463,7 +474,7 @@ public:
 		addMetadataFieldButton = new QPushButton("Add metadata field");
 		tagText(addMetadataFieldButton, "Add metadata field");
 		metadataLayout->addWidget(addMetadataFieldButton);
-		sections->addWidget(metadataPage);
+		sections->addWidget(makePageScroll(metadataPage));
 
 		auto *clapperboardPage = new QWidget();
 		auto *clapperboardLayout = new QVBoxLayout(clapperboardPage);
@@ -490,7 +501,8 @@ public:
 		clapperboardSnapshotButton->setFixedSize(34, 30);
 		clapperboardSnapshotButton->setEnabled(false);
 		snapshotControls->addWidget(clapperboardSnapshotButton);
-		connect(clapperboardSnapshotButton, &QPushButton::clicked, this, [this]() { cycleClapperboardSnapshot(); });
+		connect(clapperboardSnapshotButton, &QPushButton::clicked, this,
+			[this]() { cycleClapperboardSnapshot(); });
 		clapperboardZoomButton = new QPushButton();
 		clapperboardZoomButton->setIcon(fitIcon(false));
 		clapperboardZoomButton->setFixedSize(34, 30);
@@ -538,33 +550,33 @@ public:
 			addClapperboardPageFieldRow(field);
 		clapScroll->setWidget(clapContainer);
 		clapperboardLayout->addWidget(clapScroll, 1);
-		sections->addWidget(clapperboardPage);
+		sections->addWidget(makePageScroll(clapperboardPage));
 
-			root->addWidget(panel, 1);
+		root->addWidget(panel, 1);
 
-			clipName = createClipNameLabel();
-			root->addWidget(clipName);
+		clipName = createClipNameLabel();
+		root->addWidget(clipName);
 
-			auto *dockFooter = new QHBoxLayout();
-			dockFooter->setContentsMargins(0, 0, 0, 0);
-			coffeeButton = new QPushButton();
-			coffeeButton->setIcon(kofiIcon());
-			coffeeButton->setIconSize(QSize(28, 22));
-			coffeeButton->setText(" Ko-fi");
-			coffeeButton->setToolTip("Support RecPilot");
-			tagText(coffeeButton, "Ko-fi");
-			dockFooter->addWidget(coffeeButton, 0, Qt::AlignLeft);
-			dockFooter->addStretch();
-			clapperboardButton = new QPushButton();
-			clapperboardButton->setIcon(clapIcon());
-			clapperboardButton->setIconSize(QSize(24, 24));
-			clapperboardButton->setToolTip("Clapperboard");
-			dockFooter->addWidget(clapperboardButton, 0, Qt::AlignCenter);
-			dockFooter->addStretch();
-			languageButton = new QPushButton("🇬🇧 English");
-			tagText(languageButton, "Language");
-			dockFooter->addWidget(languageButton, 0, Qt::AlignRight);
-			root->addLayout(dockFooter);
+		auto *dockFooter = new QHBoxLayout();
+		dockFooter->setContentsMargins(0, 0, 0, 0);
+		coffeeButton = new QPushButton();
+		coffeeButton->setIcon(kofiIcon());
+		coffeeButton->setIconSize(QSize(28, 22));
+		coffeeButton->setText(" Ko-fi");
+		coffeeButton->setToolTip("Support RecPilot");
+		tagText(coffeeButton, "Ko-fi");
+		dockFooter->addWidget(coffeeButton, 0, Qt::AlignLeft);
+		dockFooter->addStretch();
+		clapperboardButton = new QPushButton();
+		clapperboardButton->setIcon(clapIcon());
+		clapperboardButton->setIconSize(QSize(24, 24));
+		clapperboardButton->setToolTip("Clapperboard");
+		dockFooter->addWidget(clapperboardButton, 0, Qt::AlignCenter);
+		dockFooter->addStretch();
+		languageButton = new QPushButton("🇬🇧 English");
+		tagText(languageButton, "Language");
+		dockFooter->addWidget(languageButton, 0, Qt::AlignRight);
+		root->addLayout(dockFooter);
 
 		connect(recButton, &QPushButton::clicked, this, [this]() { toggleRecording(); });
 		connect(armedButton, &QPushButton::toggled, this, [this](bool value) {
@@ -583,11 +595,12 @@ public:
 			setBlocked(armedButton, value);
 			updateTopToggleButtons();
 		});
-			connect(metadataCsvPerCard, &QCheckBox::toggled, this,
-				[this](bool value) { setBool("metadata_csv_per_card", value); });
+		connect(metadataCsvPerCard, &QCheckBox::toggled, this,
+			[this](bool value) { setBool("metadata_csv_per_card", value); });
 		connect(clapperboardSaveSnapshots, &QCheckBox::toggled, this,
 			[this](bool value) { setBool("clapperboard_save_snapshots", value); });
-		connect(metadataAutoDetectButton, &QPushButton::clicked, this, [this]() { requestMetadataAutoDetect(); });
+		connect(metadataAutoDetectButton, &QPushButton::clicked, this,
+			[this]() { requestMetadataAutoDetect(); });
 		connect(addMetadataFieldButton, &QPushButton::clicked, this, [this]() {
 			addMetadataFieldRow({});
 			saveMetadataRowsToSettings();
@@ -641,7 +654,8 @@ public:
 		connect(recordingResolution, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
 			[this](int index) { applyRecordingResolution(index); });
 		connect(autoDetectCenterButton, &QPushButton::clicked, this, [this]() { requestAutoDetectCenter(); });
-		connect(autoDetectClipNameButton, &QPushButton::clicked, this, [this]() { requestAutoDetectClipName(); });
+		connect(autoDetectClipNameButton, &QPushButton::clicked, this,
+			[this]() { requestAutoDetectClipName(); });
 		connect(selectCenterButton, &QPushButton::clicked, this, [this]() { beginCenterSelection(); });
 		connect(selectClipNameButton, &QPushButton::clicked, this, [this]() { beginClipNameSelection(); });
 		connect(loadPresetButton, &QPushButton::clicked, this, [this]() { loadSelectedPreset(); });
@@ -653,13 +667,13 @@ public:
 
 		pollTimer = new QTimer(this);
 		connect(pollTimer, &QTimer::timeout, this, [this]() { refreshTarget(); });
-		pollTimer->start(1500);
+		pollTimer->start(2000);
 
 		coffeeReminderTimer = new QTimer(this);
 		coffeeReminderTimer->setSingleShot(true);
 		connect(coffeeReminderTimer, &QTimer::timeout, this, [this]() { showCoffeeDialog(true); });
 
-		refreshTarget();
+		QTimer::singleShot(250, this, [this]() { refreshTarget(); });
 		QTimer::singleShot(1000, this, [this]() {
 			recordingOutputUpdatesReady = true;
 			refreshRecordingCodecAvailability();
@@ -671,16 +685,16 @@ public:
 	}
 
 	~RecTriggerDock() override
-		{
-			removePreviewPickEventFilters();
-			hidePreviewPickHint();
-			hidePreviewResultToast();
-			if (clapperboardLoupe)
-				clapperboardLoupe->hide();
-			clearMetadataRows();
-			if (filter)
-				obs_source_release(filter);
-		}
+	{
+		removePreviewPickEventFilters();
+		hidePreviewPickHint();
+		hidePreviewResultToast();
+		if (clapperboardLoupe)
+			clapperboardLoupe->hide();
+		clearMetadataRows();
+		if (filter)
+			obs_source_release(filter);
+	}
 
 protected:
 	bool eventFilter(QObject *watched, QEvent *event) override
@@ -762,11 +776,11 @@ private:
 	QComboBox *colorPreset = nullptr;
 	QPushButton *colorSwatch = nullptr;
 	QPushButton *pickColorButton = nullptr;
-		QPushButton *fineTuneToggle = nullptr;
-		QWidget *fineTunePanel = nullptr;
-		QPushButton *coffeeButton = nullptr;
-		QPushButton *clapperboardButton = nullptr;
-		QPushButton *languageButton = nullptr;
+	QPushButton *fineTuneToggle = nullptr;
+	QWidget *fineTunePanel = nullptr;
+	QPushButton *coffeeButton = nullptr;
+	QPushButton *clapperboardButton = nullptr;
+	QPushButton *languageButton = nullptr;
 	QCheckBox *ocrOToZero = nullptr;
 	QCheckBox *ocrSpacesToUnderscores = nullptr;
 	QCheckBox *ocrRemoveSpaces = nullptr;
@@ -793,7 +807,7 @@ private:
 	QCheckBox *autoFolderByCamera = nullptr;
 	QCheckBox *autoFolderByCard = nullptr;
 	QCheckBox *clapperboardSaveSnapshots = nullptr;
-		QCheckBox *metadataCsvPerCard = nullptr;
+	QCheckBox *metadataCsvPerCard = nullptr;
 	QPushButton *metadataAutoDetectButton = nullptr;
 	QPushButton *addMetadataFieldButton = nullptr;
 	QWidget *metadataFieldsContainer = nullptr;
@@ -824,24 +838,24 @@ private:
 	QComboBox *presetPicker = nullptr;
 	QPushButton *loadPresetButton = nullptr;
 	QPushButton *savePresetButton = nullptr;
-		QPushButton *deletePresetButton = nullptr;
-		QLabel *presetHint = nullptr;
-		QLabel *previewPickHint = nullptr;
-		QLabel *previewResultToast = nullptr;
-		QString previewResultToastKey;
-		bool previewResultToastSuccess = false;
-		QString lastPickDebug;
+	QPushButton *deletePresetButton = nullptr;
+	QLabel *presetHint = nullptr;
+	QLabel *previewPickHint = nullptr;
+	QLabel *previewResultToast = nullptr;
+	QString previewResultToastKey;
+	bool previewResultToastSuccess = false;
+	QString lastPickDebug;
 	std::vector<QPointer<QObject>> previewPickEventTargets;
-		QTimer *pollTimer = nullptr;
-		QTimer *coffeeReminderTimer = nullptr;
-		obs_source_t *filter = nullptr;
+	QTimer *pollTimer = nullptr;
+	QTimer *coffeeReminderTimer = nullptr;
+	obs_source_t *filter = nullptr;
 	QJsonArray customPresets;
 	PickMode pickMode = PickMode::None;
 	DockLanguage language = DockLanguage::English;
 	bool recordingOutputUpdatesReady = false;
-		bool pendingRecordingCodecApply = false;
-		bool coffeeDialogVisible = false;
-		QString temporaryStatus;
+	bool pendingRecordingCodecApply = false;
+	bool coffeeDialogVisible = false;
+	QString temporaryStatus;
 	int temporaryStatusRefreshes = 0;
 
 	static void filterEnum(obs_source_t *, obs_source_t *child, void *param)
@@ -1002,7 +1016,7 @@ private:
 		setBlocked(autoFolderByCamera, obs_data_get_bool(settings, "auto_folder_by_camera"));
 		setBlocked(autoFolderByCard, obs_data_get_bool(settings, "auto_folder_by_card"));
 		setBlocked(clapperboardSaveSnapshots, obs_data_get_bool(settings, "clapperboard_save_snapshots"));
-			setBlocked(metadataCsvPerCard, obs_data_get_bool(settings, "metadata_csv_per_card"));
+		setBlocked(metadataCsvPerCard, obs_data_get_bool(settings, "metadata_csv_per_card"));
 		loadMetadataRowsFromSettings(settings);
 		const bool metadataVisible = isMetadataSectionActive();
 		if (obs_data_get_bool(settings, "metadata_overlay_visible") != metadataVisible) {
@@ -1019,14 +1033,14 @@ private:
 		int colorB = static_cast<int>(obs_data_get_int(settings, "color_b"));
 		if (colorR == 0 && colorG == 0 && colorB == 0)
 			colorR = 255;
-			updateColorUi(colorR, colorG, colorB);
-			if (obs_data_get_bool(settings, "coffee_thanks_confirmed")) {
-				if (coffeeReminderTimer)
-					coffeeReminderTimer->stop();
-			} else {
-				scheduleCoffeeReminder(false);
-			}
-			setBlocked(ocrEnabled, obs_data_get_bool(settings, "ocr_enabled"));
+		updateColorUi(colorR, colorG, colorB);
+		if (obs_data_get_bool(settings, "coffee_thanks_confirmed")) {
+			if (coffeeReminderTimer)
+				coffeeReminderTimer->stop();
+		} else {
+			scheduleCoffeeReminder(false);
+		}
+		setBlocked(ocrEnabled, obs_data_get_bool(settings, "ocr_enabled"));
 		setBlocked(ocrOToZero, obs_data_get_bool(settings, "ocr_o_to_zero"));
 		bool spacesToUnderscores = obs_data_get_bool(settings, "ocr_spaces_to_underscores");
 		bool removeSpaces = obs_data_get_bool(settings, "ocr_remove_spaces");
@@ -1038,7 +1052,8 @@ private:
 		setBlocked(centerY, displayValueForDoubleKey("center_y", obs_data_get_double(settings, "center_y")));
 		setBlocked(radius, displayValueForDoubleKey("radius", obs_data_get_double(settings, "radius")));
 		double storedOcrWidth = std::clamp(obs_data_get_double(settings, "ocr_width"), 0.0, clipNameWidthMax());
-		double storedOcrHeight = std::clamp(obs_data_get_double(settings, "ocr_height"), 0.0, clipNameHeightMax());
+		double storedOcrHeight =
+			std::clamp(obs_data_get_double(settings, "ocr_height"), 0.0, clipNameHeightMax());
 		if (storedOcrWidth != obs_data_get_double(settings, "ocr_width") ||
 		    storedOcrHeight != obs_data_get_double(settings, "ocr_height")) {
 			obs_data_set_double(settings, "ocr_width", storedOcrWidth);
@@ -1089,23 +1104,25 @@ private:
 			return;
 
 		const char *raw = obs_data_get_string(settings, "auto_detect_center_result");
-			const QString result = raw ? QString::fromUtf8(raw) : QString();
-			if (result.isEmpty() || result == "waiting")
-				return;
+		const QString result = raw ? QString::fromUtf8(raw) : QString();
+		if (result.isEmpty() || result == "waiting")
+			return;
 
-			const char *detailRaw = obs_data_get_string(settings, "auto_detect_center_detail");
-			const QString detail = detailRaw ? QString::fromUtf8(detailRaw).trimmed() : QString();
-			if (result == "found") {
-				showPreviewResultToast("Center detected", true);
-				setTemporaryStatus(detail.isEmpty() ? trText("Auto detection found the circle.")
-								    : QString("%1 %2").arg(trText("Auto detection found the circle."), detail),
-						   5);
-			} else if (result == "not_found") {
-				showPreviewResultToast("Center not found", false);
-				setTemporaryStatus(detail.isEmpty() ? trText("No matching circle found. Check the selected color.")
-								    : QString("%1 %2").arg(
-									      trText("No matching circle found."), detail),
-						   8);
+		const char *detailRaw = obs_data_get_string(settings, "auto_detect_center_detail");
+		const QString detail = detailRaw ? QString::fromUtf8(detailRaw).trimmed() : QString();
+		if (result == "found") {
+			showPreviewResultToast("Center detected", true);
+			setTemporaryStatus(detail.isEmpty()
+						   ? trText("Auto detection found the circle.")
+						   : QString("%1 %2").arg(trText("Auto detection found the circle."),
+									  detail),
+					   5);
+		} else if (result == "not_found") {
+			showPreviewResultToast("Center not found", false);
+			setTemporaryStatus(detail.isEmpty()
+						   ? trText("No matching circle found. Check the selected color.")
+						   : QString("%1 %2").arg(trText("No matching circle found."), detail),
+					   8);
 		} else if (result == "no_frame") {
 			setTemporaryStatus(trText("No image received. Make sure the controlled source is visible."), 5);
 		}
@@ -1134,13 +1151,15 @@ private:
 
 		if (result == "found") {
 			showPreviewResultToast("Clip name detected", true);
-			setTemporaryStatus(detail.isEmpty() ? trText("Clip name detected.")
-							    : QString("%1 %2").arg(trText("Clip name detected."), detail),
+			setTemporaryStatus(detail.isEmpty()
+						   ? trText("Clip name detected.")
+						   : QString("%1 %2").arg(trText("Clip name detected."), detail),
 					   5);
 		} else if (result == "not_found") {
 			showPreviewResultToast("Clip name not found", false);
-			setTemporaryStatus(detail.isEmpty() ? trText("Clip name not found.")
-							    : QString("%1 %2").arg(trText("Clip name not found."), detail),
+			setTemporaryStatus(detail.isEmpty()
+						   ? trText("Clip name not found.")
+						   : QString("%1 %2").arg(trText("Clip name not found."), detail),
 					   8);
 		} else if (result == "no_frame") {
 			setTemporaryStatus(trText("No image received. Make sure the controlled source is visible."), 5);
@@ -1187,17 +1206,19 @@ private:
 		}
 
 		if (result == "found") {
-			const int count = target == "metadata" ? applyClapperboardFields(json) : applyClapperboardPageFields(json);
+			const int count = target == "metadata" ? applyClapperboardFields(json)
+							       : applyClapperboardPageFields(json);
 			if (count > 0) {
-				setTemporaryStatus(
-					QString("%1 %2")
-						.arg(target == "metadata" ? trText("Auto-detect filled metadata fields.")
-									  : trText("Clapperboard filled fields."))
-						.arg(count),
-					6);
+				setTemporaryStatus(QString("%1 %2")
+							   .arg(target == "metadata"
+									? trText("Auto-detect filled metadata fields.")
+									: trText("Clapperboard filled fields."))
+							   .arg(count),
+						   6);
 			} else {
-				setTemporaryStatus(target == "metadata" ? trText("Auto-detect found no usable metadata.")
-									: trText("Clapperboard found no usable data."),
+				setTemporaryStatus(target == "metadata"
+							   ? trText("Auto-detect found no usable metadata.")
+							   : trText("Clapperboard found no usable data."),
 						   6);
 			}
 		} else if (result == "not_found") {
@@ -1211,7 +1232,8 @@ private:
 
 	void setClipNameText(const std::string &currentClip)
 	{
-		const QString text = QString("%1: %2").arg(trText("Clip name"), currentClip.empty() ? "-" : currentClip.c_str());
+		const QString text =
+			QString("%1: %2").arg(trText("Clip name"), currentClip.empty() ? "-" : currentClip.c_str());
 		if (clipName)
 			clipName->setText(text);
 	}
@@ -1317,7 +1339,8 @@ private:
 				display = clapperboardPreviewSourcePixmap.copy(cropRect);
 		}
 		if (clapperboardRotation != 0)
-			display = display.transformed(QTransform().rotate(clapperboardRotation), Qt::SmoothTransformation);
+			display = display.transformed(QTransform().rotate(clapperboardRotation),
+						      Qt::SmoothTransformation);
 
 		clapperboardPreviewPixmap = display;
 		clapperboardPreview->setPixmap(clapperboardPreviewPixmap.scaled(
@@ -1400,31 +1423,36 @@ private:
 		const int cropWidth = std::max(240, clapperboardPreviewPixmap.width() * 2 / 7);
 		const int cropHeight = std::max(160, clapperboardPreviewPixmap.height() * 2 / 7);
 		QRect crop(sourceX - cropWidth / 2, sourceY - cropHeight / 2, cropWidth, cropHeight);
-		crop.moveLeft(std::clamp(crop.left(), 0, std::max(0, clapperboardPreviewPixmap.width() - crop.width())));
-		crop.moveTop(std::clamp(crop.top(), 0, std::max(0, clapperboardPreviewPixmap.height() - crop.height())));
+		crop.moveLeft(
+			std::clamp(crop.left(), 0, std::max(0, clapperboardPreviewPixmap.width() - crop.width())));
+		crop.moveTop(
+			std::clamp(crop.top(), 0, std::max(0, clapperboardPreviewPixmap.height() - crop.height())));
 
 		clapperboardLoupe->setPixmap(clapperboardPreviewPixmap.copy(crop).scaled(
 			clapperboardLoupe->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-		QPoint target = QCursor::pos() - QPoint(clapperboardLoupe->width() + 18, clapperboardLoupe->height() / 2);
+		QPoint target =
+			QCursor::pos() - QPoint(clapperboardLoupe->width() + 18, clapperboardLoupe->height() / 2);
 		if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
 			const QRect available = screen->availableGeometry();
-			target.setX(std::clamp(target.x(), available.left(), available.right() - clapperboardLoupe->width()));
-			target.setY(std::clamp(target.y(), available.top(), available.bottom() - clapperboardLoupe->height()));
+			target.setX(std::clamp(target.x(), available.left(),
+					       available.right() - clapperboardLoupe->width()));
+			target.setY(std::clamp(target.y(), available.top(),
+					       available.bottom() - clapperboardLoupe->height()));
 		}
 		clapperboardLoupe->move(target);
 		clapperboardLoupe->show();
 	}
 
-		static QStringList metadataFieldSuggestions()
-		{
-			return {
-				"Slate",       "Scene",       "Date",        "Camera",      "Roll",       "Take",
-				"Clip",        "Circled",     "Lens",        "Filters",     "Stop",       "Focus",
-				"Lens Height", "FPS",         "Shutter",     "Film Stock",  "Tilt",       "Description",
-				"Notes",       "Color Temp",  "ISO",         "Time Code",   "Lut",        "Aspect Ratio",
-				"Format",      "Resolution",  "Origin Date", "Take Origin",
-			};
-		}
+	static QStringList metadataFieldSuggestions()
+	{
+		return {
+			"Slate",       "Scene",      "Date",        "Camera",      "Roll", "Take",
+			"Clip",        "Circled",    "Lens",        "Filters",     "Stop", "Focus",
+			"Lens Height", "FPS",        "Shutter",     "Film Stock",  "Tilt", "Description",
+			"Notes",       "Color Temp", "ISO",         "Time Code",   "Lut",  "Aspect Ratio",
+			"Format",      "Resolution", "Origin Date", "Take Origin",
+		};
+	}
 
 	static QStringList clapperboardFieldSuggestions()
 	{
@@ -1605,12 +1633,12 @@ private:
 		row->detailsToggle->setArrowType(Qt::RightArrow);
 		const double normalizedWidth = object.value("width").toDouble(METADATA_STANDARD_WIDTH);
 		const double normalizedHeight = object.value("height").toDouble(METADATA_STANDARD_HEIGHT);
-		row->x = createMetadataPositionSpin(
-			metadataTopLeftToCenter(object.value("x").toDouble(0.0), normalizedWidth, METADATA_CANVAS_WIDTH),
-			METADATA_CANVAS_WIDTH);
-		row->y = createMetadataPositionSpin(
-			metadataTopLeftToCenter(object.value("y").toDouble(0.0), normalizedHeight, METADATA_CANVAS_HEIGHT),
-			METADATA_CANVAS_HEIGHT);
+		row->x = createMetadataPositionSpin(metadataTopLeftToCenter(object.value("x").toDouble(0.0),
+									    normalizedWidth, METADATA_CANVAS_WIDTH),
+						    METADATA_CANVAS_WIDTH);
+		row->y = createMetadataPositionSpin(metadataTopLeftToCenter(object.value("y").toDouble(0.0),
+									    normalizedHeight, METADATA_CANVAS_HEIGHT),
+						    METADATA_CANVAS_HEIGHT);
 		row->width = createMetadataSizeSpin(normalizedWidth, METADATA_STANDARD_WIDTH);
 		row->height = createMetadataSizeSpin(normalizedHeight, METADATA_STANDARD_HEIGHT);
 		row->detailsPanel = new QWidget();
@@ -1650,9 +1678,11 @@ private:
 			if (row->detailsToggle)
 				row->detailsToggle->setArrowType(checked ? Qt::DownArrow : Qt::RightArrow);
 		});
-		connect(row->pickButton, &QPushButton::clicked, this, [this, row]() { beginMetadataFieldSelection(row); });
+		connect(row->pickButton, &QPushButton::clicked, this,
+			[this, row]() { beginMetadataFieldSelection(row); });
 		connect(row->removeButton, &QPushButton::clicked, this, [this, row]() {
-			metadataRows.erase(std::remove(metadataRows.begin(), metadataRows.end(), row), metadataRows.end());
+			metadataRows.erase(std::remove(metadataRows.begin(), metadataRows.end(), row),
+					   metadataRows.end());
 			if (activeMetadataPickRow == row)
 				activeMetadataPickRow = nullptr;
 			if (row->frame)
@@ -1669,7 +1699,8 @@ private:
 			return nullptr;
 
 		for (MetadataFieldRow *row : metadataRows) {
-			if (row && row->name && row->name->currentText().trimmed().compare(cleanName, Qt::CaseInsensitive) == 0)
+			if (row && row->name &&
+			    row->name->currentText().trimmed().compare(cleanName, Qt::CaseInsensitive) == 0)
 				return row;
 		}
 
@@ -1710,8 +1741,8 @@ private:
 					row->x->setValue(metadataTopLeftToCenter(object.value("x").toDouble(0.0), width,
 										 METADATA_CANVAS_WIDTH));
 				if (row->y)
-					row->y->setValue(metadataTopLeftToCenter(object.value("y").toDouble(0.0), height,
-										 METADATA_CANVAS_HEIGHT));
+					row->y->setValue(metadataTopLeftToCenter(object.value("y").toDouble(0.0),
+										 height, METADATA_CANVAS_HEIGHT));
 			}
 			applied++;
 		}
@@ -1731,12 +1762,12 @@ private:
 			QJsonObject object;
 			object["name"] = row->name->currentText().trimmed();
 			object["value"] = row->value ? row->value->text() : QString();
-			const double width = row->width ? metadataDisplayToNormalized(row->width->value(),
-										      METADATA_STANDARD_WIDTH)
-							: METADATA_STANDARD_WIDTH;
+			const double width =
+				row->width ? metadataDisplayToNormalized(row->width->value(), METADATA_STANDARD_WIDTH)
+					   : METADATA_STANDARD_WIDTH;
 			const double height = row->height ? metadataDisplayToNormalized(row->height->value(),
 											METADATA_STANDARD_HEIGHT)
-							 : METADATA_STANDARD_HEIGHT;
+							  : METADATA_STANDARD_HEIGHT;
 			object["x"] = row->x ? metadataCenterToTopLeft(row->x->value(), METADATA_CANVAS_WIDTH, width)
 					     : 0.0;
 			object["y"] = row->y ? metadataCenterToTopLeft(row->y->value(), METADATA_CANVAS_HEIGHT, height)
@@ -1795,15 +1826,9 @@ private:
 			widget->setProperty("trKey", key);
 	}
 
-	bool isMetadataSectionActive() const
-	{
-		return sectionPicker && sectionPicker->currentIndex() == 4;
-	}
+	bool isMetadataSectionActive() const { return sectionPicker && sectionPicker->currentIndex() == 4; }
 
-	void updateMetadataOverlayVisibility()
-	{
-		setBool("metadata_overlay_visible", isMetadataSectionActive());
-	}
+	void updateMetadataOverlayVisibility() { setBool("metadata_overlay_visible", isMetadataSectionActive()); }
 
 	QString trText(const QString &key) const
 	{
@@ -1824,21 +1849,22 @@ private:
 			{"Auto-detect metadata", "Auto-détection metadata"},
 			{"Auto-detect metadata requested...", "Auto-détection metadata demandée..."},
 			{"Auto-detect filled metadata fields.", "Auto-détection a rempli des champs metadata."},
-			{"Auto-detect found no usable metadata.", "Auto-détection n'a trouvé aucune metadata exploitable."},
+			{"Auto-detect found no usable metadata.",
+			 "Auto-détection n'a trouvé aucune metadata exploitable."},
 			{"Clapperboard reading clap...", "Lecture du clap..."},
 			{"Clapperboard filled fields.", "Le clap a rempli des champs."},
 			{"Clapperboard found no usable data.", "Aucune donnée de clap exploitable trouvée."},
-				{"Always armed on OBS launch", "Toujours armé au lancement d'OBS"},
-				{"Support RecPilot", "Soutenir RecPilot"},
-				{"I want to offer Bart a coffee", "Je souhaite offrir un café à Bart"},
-				{"I want to offer Bart a coffee later", "Je souhaite offrir un café à Bart plus tard"},
-				{"I already offered Bart a coffee", "J'ai déjà offert un café à Bart"},
-				{"Are you sure you already offered Bart a coffee?",
-				 "Êtes-vous sûr d'avoir bien offert un café à Bart ?"},
-				{"OK, since you offered Bart a coffee, we will leave you alone. Thank you for your support!",
-				 "OK, puisque vous avez offert un café à Bart, nous vous laissons tranquille. Merci de votre soutien !"},
-				{"Add +1 to Clipname (ARRI camera)", "Ajouter +1 au Clipname (caméra ARRI)"},
-				{"Save Clapperboard snapshots", "Enregistrer les snapshots Clap"},
+			{"Always armed on OBS launch", "Toujours armé au lancement d'OBS"},
+			{"Support RecPilot", "Soutenir RecPilot"},
+			{"I want to offer Bart a coffee", "Je souhaite offrir un café à Bart"},
+			{"I want to offer Bart a coffee later", "Je souhaite offrir un café à Bart plus tard"},
+			{"I already offered Bart a coffee", "J'ai déjà offert un café à Bart"},
+			{"Are you sure you already offered Bart a coffee?",
+			 "Êtes-vous sûr d'avoir bien offert un café à Bart ?"},
+			{"OK, since you offered Bart a coffee, we will leave you alone. Thank you for your support!",
+			 "OK, puisque vous avez offert un café à Bart, nous vous laissons tranquille. Merci de votre soutien !"},
+			{"Add +1 to Clipname (ARRI camera)", "Ajouter +1 au Clipname (caméra ARRI)"},
+			{"Save Clapperboard snapshots", "Enregistrer les snapshots Clap"},
 			{"Color selection", "Sélection de couleur"},
 			{"Red", "Rouge"},
 			{"Green", "Vert"},
@@ -1855,11 +1881,11 @@ private:
 			{"By date", "Par date"},
 			{"By camera", "Par caméra"},
 			{"By card", "Par carte"},
-				{"Recording codec", "Codec d'enregistrement"},
-				{"Recording resolution", "Résolution d'enregistrement"},
-				{"Recording settings are locked while OBS is active.",
-				 "Les réglages d'enregistrement sont verrouillés pendant qu'OBS est actif."},
-				{"ZoeLog CSV per card", "CSV ZoeLog par carte"},
+			{"Recording codec", "Codec d'enregistrement"},
+			{"Recording resolution", "Résolution d'enregistrement"},
+			{"Recording settings are locked while OBS is active.",
+			 "Les réglages d'enregistrement sont verrouillés pendant qu'OBS est actif."},
+			{"ZoeLog CSV per card", "CSV ZoeLog par carte"},
 			{"Add metadata field", "Ajouter un champ metadata"},
 			{"Manual value or OCR result", "Valeur manuelle ou résultat OCR"},
 			{"Select OCR area", "Sélectionner la zone OCR"},
@@ -1940,16 +1966,16 @@ private:
 			{"Clapperboard reading clap...", "CLAP-banana lit clap..."},
 			{"Clapperboard filled fields.", "CLAP-banana rempli champs."},
 			{"Clapperboard found no usable data.", "CLAP-banana no data trouvé."},
-				{"Always armed on OBS launch", "Toujours armé quand OBS bello"},
-				{"Support RecPilot", "Soutenir RecPilot-bello"},
-				{"I want to offer Bart a coffee", "Moi offrir café à Bart"},
-				{"I want to offer Bart a coffee later", "Moi offrir café à Bart plus tard"},
-				{"I already offered Bart a coffee", "Moi déjà offert café à Bart"},
-				{"Are you sure you already offered Bart a coffee?", "Toi sûr café à Bart déjà donné ?"},
-				{"OK, since you offered Bart a coffee, we will leave you alone. Thank you for your support!",
-				 "OK, café Bart donné, nous stop papoy. Tank yu soutien-banana!"},
-				{"Add +1 to Clipname (ARRI camera)", "Bap +1 nom-nom ARRI"},
-				{"Save Clapperboard snapshots", "Garder snapshots CLAP-banana"},
+			{"Always armed on OBS launch", "Toujours armé quand OBS bello"},
+			{"Support RecPilot", "Soutenir RecPilot-bello"},
+			{"I want to offer Bart a coffee", "Moi offrir café à Bart"},
+			{"I want to offer Bart a coffee later", "Moi offrir café à Bart plus tard"},
+			{"I already offered Bart a coffee", "Moi déjà offert café à Bart"},
+			{"Are you sure you already offered Bart a coffee?", "Toi sûr café à Bart déjà donné ?"},
+			{"OK, since you offered Bart a coffee, we will leave you alone. Thank you for your support!",
+			 "OK, café Bart donné, nous stop papoy. Tank yu soutien-banana!"},
+			{"Add +1 to Clipname (ARRI camera)", "Bap +1 nom-nom ARRI"},
+			{"Save Clapperboard snapshots", "Garder snapshots CLAP-banana"},
 			{"Color selection", "Couleur banana"},
 			{"Red", "Roujo"},
 			{"Green", "Verdo"},
@@ -1966,10 +1992,10 @@ private:
 			{"By date", "Par date-banana"},
 			{"By camera", "Par cam-cam"},
 			{"By card", "Par carte-bello"},
-				{"Recording codec", "Codec rec-bap"},
-				{"Recording resolution", "Résolushun"},
-				{"Recording settings are locked while OBS is active.", "Réglages rec dodo pendant OBS actif."},
-				{"ZoeLog CSV per card", "CSV ZoeLog par carte-banana"},
+			{"Recording codec", "Codec rec-bap"},
+			{"Recording resolution", "Résolushun"},
+			{"Recording settings are locked while OBS is active.", "Réglages rec dodo pendant OBS actif."},
+			{"ZoeLog CSV per card", "CSV ZoeLog par carte-banana"},
 			{"Add metadata field", "Ajouter meta-banana"},
 			{"Manual value or OCR result", "Valeur main ou OCR-bello"},
 			{"Select OCR area", "Pika zone OCR"},
@@ -1997,7 +2023,8 @@ private:
 			{"Clip name detected.", "Nom-nom clip trouvé!"},
 			{"Clip name not found.", "Nom-nom clip no trouvé."},
 			{"No matching circle found.", "No rond pareil trouvé."},
-			{"No matching circle found. Check the selected color.", "No rond pareil. Check couleur banana."},
+			{"No matching circle found. Check the selected color.",
+			 "No rond pareil. Check couleur banana."},
 			{"No image received. Make sure the controlled source is visible.",
 			 "No image reçue. Source visible, por favor."},
 			{"Select in one click", "Pika one click"},
@@ -2052,8 +2079,8 @@ private:
 		if (sectionPicker) {
 			QSignalBlocker blocker(sectionPicker);
 			const int current = sectionPicker->currentIndex();
-			const QStringList keys = {"General", "Detection Center", "Clip Name", "Presets", "Metadata",
-						  "Clapperboard"};
+			const QStringList keys = {"General", "Detection Center", "Clip Name",
+						  "Presets", "Metadata",         "Clapperboard"};
 			for (int i = 0; i < keys.size() && i < sectionPicker->count(); ++i)
 				sectionPicker->setItemText(i, trText(keys[i]));
 			sectionPicker->setCurrentIndex(current);
@@ -2062,27 +2089,28 @@ private:
 		if (colorPreset) {
 			QSignalBlocker blocker(colorPreset);
 			const int current = colorPreset->currentIndex();
-			const QStringList keys = {"Red", "Green", "Blue", "Yellow", "Orange", "Magenta", "Cyan",
-						  "White", "Custom"};
+			const QStringList keys = {"Red",     "Green", "Blue",  "Yellow", "Orange",
+						  "Magenta", "Cyan",  "White", "Custom"};
 			for (int i = 0; i < keys.size() && i < colorPreset->count(); ++i)
 				colorPreset->setItemText(i, trText(keys[i]));
 			colorPreset->setCurrentIndex(current);
 		}
 
-			if (recordingFolderPath)
-				recordingFolderPath->setPlaceholderText(trText("OBS default folder"));
-			if (coffeeButton)
-				coffeeButton->setToolTip(trText("Support RecPilot"));
-			if (clapperboardButton)
-				clapperboardButton->setToolTip(trText("Clapperboard"));
-			if (languageButton) {
+		if (recordingFolderPath)
+			recordingFolderPath->setPlaceholderText(trText("OBS default folder"));
+		if (coffeeButton)
+			coffeeButton->setToolTip(trText("Support RecPilot"));
+		if (clapperboardButton)
+			clapperboardButton->setToolTip(trText("Clapperboard"));
+		if (languageButton) {
 			if (language == DockLanguage::Minion) {
 				languageButton->setIcon(yellowBuddyIcon());
 				languageButton->setIconSize(QSize(22, 22));
 				languageButton->setText("  Minion");
 			} else {
 				languageButton->setIcon(QIcon());
-				languageButton->setText(language == DockLanguage::English ? "🇬🇧 English" : "🇫🇷 Français");
+				languageButton->setText(language == DockLanguage::English ? "🇬🇧 English"
+											  : "🇫🇷 Français");
 			}
 		}
 
@@ -2096,7 +2124,8 @@ private:
 
 	void updateAutoFolderUi()
 	{
-		const bool enabled = autoFolderEnabled && autoFolderEnabled->isEnabled() && autoFolderEnabled->isChecked();
+		const bool enabled = autoFolderEnabled && autoFolderEnabled->isEnabled() &&
+				     autoFolderEnabled->isChecked();
 		if (autoFolderByDate)
 			autoFolderByDate->setEnabled(enabled);
 		if (autoFolderByCamera)
@@ -2105,171 +2134,176 @@ private:
 			autoFolderByCard->setEnabled(enabled);
 	}
 
-		void updateFineTuneToggle()
-		{
-			if (!fineTuneToggle)
-				return;
-			const bool expanded = fineTuneToggle->isChecked();
-			fineTuneToggle->setText(QString("%1 %2").arg(expanded ? "▾" : "▸", trText("Fine tuning")));
-		}
+	void updateFineTuneToggle()
+	{
+		if (!fineTuneToggle)
+			return;
+		const bool expanded = fineTuneToggle->isChecked();
+		fineTuneToggle->setText(QString("%1 %2").arg(expanded ? "▾" : "▸", trText("Fine tuning")));
+	}
 
-		bool coffeeThanksConfirmed() const
-		{
-			if (!filter)
-				return false;
-			obs_data_t *settings = obs_source_get_settings(filter);
-			if (!settings)
-				return false;
-			const bool confirmed = obs_data_get_bool(settings, "coffee_thanks_confirmed");
-			obs_data_release(settings);
-			return confirmed;
-		}
+	bool coffeeThanksConfirmed() const
+	{
+		if (!filter)
+			return false;
+		obs_data_t *settings = obs_source_get_settings(filter);
+		if (!settings)
+			return false;
+		const bool confirmed = obs_data_get_bool(settings, "coffee_thanks_confirmed");
+		obs_data_release(settings);
+		return confirmed;
+	}
 
-		void markCoffeeThanksConfirmed()
-		{
-			setBool("coffee_thanks_confirmed", true);
-			if (coffeeReminderTimer)
-				coffeeReminderTimer->stop();
-		}
+	void markCoffeeThanksConfirmed()
+	{
+		setBool("coffee_thanks_confirmed", true);
+		if (coffeeReminderTimer)
+			coffeeReminderTimer->stop();
+	}
 
-		static QString todayKey()
-		{
-			return QDate::currentDate().toString(Qt::ISODate);
-		}
+	static QString todayKey() { return QDate::currentDate().toString(Qt::ISODate); }
 
-		int coffeeReminderCountToday(obs_data_t *settings) const
-		{
-			const QString today = todayKey();
-			const QString storedDay = QString::fromUtf8(obs_data_get_string(settings, "coffee_reminder_day"));
-			if (storedDay == today)
-				return static_cast<int>(obs_data_get_int(settings, "coffee_reminder_count"));
+	int coffeeReminderCountToday(obs_data_t *settings, bool *changed = nullptr) const
+	{
+		if (changed)
+			*changed = false;
+		const QString today = todayKey();
+		const QString storedDay = QString::fromUtf8(obs_data_get_string(settings, "coffee_reminder_day"));
+		if (storedDay == today)
+			return static_cast<int>(obs_data_get_int(settings, "coffee_reminder_count"));
 
-			obs_data_set_string(settings, "coffee_reminder_day", today.toUtf8().constData());
-			obs_data_set_int(settings, "coffee_reminder_count", 0);
-			return 0;
-		}
+		obs_data_set_string(settings, "coffee_reminder_day", today.toUtf8().constData());
+		obs_data_set_int(settings, "coffee_reminder_count", 0);
+		if (changed)
+			*changed = true;
+		return 0;
+	}
 
-		void scheduleCoffeeReminder(bool resetDelay)
-		{
-			if (!coffeeReminderTimer || !filter || coffeeThanksConfirmed())
-				return;
-			if (coffeeReminderTimer->isActive() && !resetDelay)
-				return;
+	void scheduleCoffeeReminder(bool resetDelay)
+	{
+		if (!coffeeReminderTimer || !filter)
+			return;
+		if (coffeeReminderTimer->isActive() && !resetDelay)
+			return;
+		if (coffeeThanksConfirmed())
+			return;
 
-			obs_data_t *settings = obs_source_get_settings(filter);
-			if (!settings)
-				return;
+		obs_data_t *settings = obs_source_get_settings(filter);
+		if (!settings)
+			return;
 
-			const int remindersToday = coffeeReminderCountToday(settings);
+		bool dayChanged = false;
+		const int remindersToday = coffeeReminderCountToday(settings, &dayChanged);
+		if (dayChanged)
 			obs_source_update(filter, settings);
-			obs_data_release(settings);
-			if (remindersToday >= 2) {
-				coffeeReminderTimer->stop();
-				return;
-			}
-
-			const int minutes = remindersToday == 0 ? QRandomGenerator::global()->bounded(5, 16)
-								: QRandomGenerator::global()->bounded(90, 301);
-			coffeeReminderTimer->start(minutes * 60 * 1000);
+		obs_data_release(settings);
+		if (remindersToday >= 2) {
+			coffeeReminderTimer->stop();
+			return;
 		}
 
-		void noteCoffeeReminderShown()
-		{
-			if (!filter)
-				return;
+		const int minutes = remindersToday == 0 ? QRandomGenerator::global()->bounded(5, 16)
+							: QRandomGenerator::global()->bounded(90, 301);
+		coffeeReminderTimer->start(minutes * 60 * 1000);
+	}
 
-			updateSettings([this](obs_data_t *settings) {
-				const int remindersToday = coffeeReminderCountToday(settings);
-				obs_data_set_string(settings, "coffee_reminder_day", todayKey().toUtf8().constData());
-				obs_data_set_int(settings, "coffee_reminder_count", std::min(2, remindersToday + 1));
-			});
+	void noteCoffeeReminderShown()
+	{
+		if (!filter)
+			return;
+
+		updateSettings([this](obs_data_t *settings) {
+			const int remindersToday = coffeeReminderCountToday(settings);
+			obs_data_set_string(settings, "coffee_reminder_day", todayKey().toUtf8().constData());
+			obs_data_set_int(settings, "coffee_reminder_count", std::min(2, remindersToday + 1));
+		});
+	}
+
+	void showCoffeeDialog(bool automatic = false)
+	{
+		if (automatic)
+			noteCoffeeReminderShown();
+
+		if (coffeeDialogVisible) {
+			scheduleCoffeeReminder(true);
+			return;
 		}
 
-		void showCoffeeDialog(bool automatic = false)
-		{
-			if (automatic)
-				noteCoffeeReminderShown();
-
-			if (coffeeDialogVisible) {
-				scheduleCoffeeReminder(true);
-				return;
-			}
-
-			if (coffeeThanksConfirmed()) {
-				if (!automatic)
-					QMessageBox::information(
-						this, trText("Support RecPilot"),
-						trText("OK, since you offered Bart a coffee, we will leave you alone. Thank you for your support!"));
-				return;
-			}
-
-			coffeeDialogVisible = true;
-			QDialog dialog(this);
-			dialog.setWindowTitle(trText("Support RecPilot"));
-			auto *layout = new QVBoxLayout(&dialog);
-			layout->setContentsMargins(18, 18, 18, 18);
-			layout->setSpacing(10);
-
-			auto *header = new QHBoxLayout();
-			auto *coffeeLogo = new QLabel();
-			coffeeLogo->setPixmap(kofiIcon().pixmap(QSize(34, 28)));
-			coffeeLogo->setFixedSize(38, 32);
-			coffeeLogo->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-			header->addWidget(coffeeLogo, 0, Qt::AlignLeft);
-			header->addStretch();
-			auto *brand = new QLabel(APP_NAME);
-			brand->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-			brand->setStyleSheet("font-size: 18px; font-weight: 800;");
-			header->addWidget(brand, 0, Qt::AlignRight);
-			layout->addLayout(header);
-
-			auto *offerNow = new QPushButton(trText("I want to offer Bart a coffee"));
-			auto *offerLater = new QPushButton(trText("I want to offer Bart a coffee later"));
-			auto *alreadyOffered = new QPushButton(trText("I already offered Bart a coffee"));
-			layout->addWidget(offerNow);
-			layout->addWidget(offerLater);
-			layout->addWidget(alreadyOffered);
-
-			int choice = 0;
-			connect(offerNow, &QPushButton::clicked, &dialog, [&]() {
-				choice = 1;
-				dialog.accept();
-			});
-			connect(offerLater, &QPushButton::clicked, &dialog, [&]() {
-				choice = 2;
-				dialog.accept();
-			});
-			connect(alreadyOffered, &QPushButton::clicked, &dialog, [&]() {
-				choice = 3;
-				dialog.accept();
-			});
-
-			dialog.exec();
-			coffeeDialogVisible = false;
-
-			if (choice == 1) {
-				QDesktopServices::openUrl(QUrl("https://ko-fi.com/bart57662"));
-				scheduleCoffeeReminder(true);
-			} else if (choice == 2 || choice == 0) {
-				scheduleCoffeeReminder(true);
-			} else if (choice == 3) {
-				const QMessageBox::StandardButton answer =
-					QMessageBox::question(this, trText("Support RecPilot"),
-							      trText("Are you sure you already offered Bart a coffee?"),
-							      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-				if (answer == QMessageBox::Yes) {
-					markCoffeeThanksConfirmed();
-					QMessageBox::information(
-						this, trText("Support RecPilot"),
-						trText("OK, since you offered Bart a coffee, we will leave you alone. Thank you for your support!"));
-				} else {
-					scheduleCoffeeReminder(true);
-				}
-			}
+		if (coffeeThanksConfirmed()) {
+			if (!automatic)
+				QMessageBox::information(
+					this, trText("Support RecPilot"),
+					trText("OK, since you offered Bart a coffee, we will leave you alone. Thank you for your support!"));
+			return;
 		}
 
-		static QPushButton *createTopToggleButton(const QString &text, const QString &tooltip)
-		{
+		coffeeDialogVisible = true;
+		QDialog dialog(this);
+		dialog.setWindowTitle(trText("Support RecPilot"));
+		auto *layout = new QVBoxLayout(&dialog);
+		layout->setContentsMargins(18, 18, 18, 18);
+		layout->setSpacing(10);
+
+		auto *header = new QHBoxLayout();
+		auto *coffeeLogo = new QLabel();
+		coffeeLogo->setPixmap(kofiIcon().pixmap(QSize(34, 28)));
+		coffeeLogo->setFixedSize(38, 32);
+		coffeeLogo->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+		header->addWidget(coffeeLogo, 0, Qt::AlignLeft);
+		header->addStretch();
+		auto *brand = new QLabel(APP_NAME);
+		brand->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+		brand->setStyleSheet("font-size: 18px; font-weight: 800;");
+		header->addWidget(brand, 0, Qt::AlignRight);
+		layout->addLayout(header);
+
+		auto *offerNow = new QPushButton(trText("I want to offer Bart a coffee"));
+		auto *offerLater = new QPushButton(trText("I want to offer Bart a coffee later"));
+		auto *alreadyOffered = new QPushButton(trText("I already offered Bart a coffee"));
+		layout->addWidget(offerNow);
+		layout->addWidget(offerLater);
+		layout->addWidget(alreadyOffered);
+
+		int choice = 0;
+		connect(offerNow, &QPushButton::clicked, &dialog, [&]() {
+			choice = 1;
+			dialog.accept();
+		});
+		connect(offerLater, &QPushButton::clicked, &dialog, [&]() {
+			choice = 2;
+			dialog.accept();
+		});
+		connect(alreadyOffered, &QPushButton::clicked, &dialog, [&]() {
+			choice = 3;
+			dialog.accept();
+		});
+
+		dialog.exec();
+		coffeeDialogVisible = false;
+
+		if (choice == 1) {
+			QDesktopServices::openUrl(QUrl("https://ko-fi.com/bart57662"));
+			scheduleCoffeeReminder(true);
+		} else if (choice == 2 || choice == 0) {
+			scheduleCoffeeReminder(true);
+		} else if (choice == 3) {
+			const QMessageBox::StandardButton answer =
+				QMessageBox::question(this, trText("Support RecPilot"),
+						      trText("Are you sure you already offered Bart a coffee?"),
+						      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+			if (answer == QMessageBox::Yes) {
+				markCoffeeThanksConfirmed();
+				QMessageBox::information(
+					this, trText("Support RecPilot"),
+					trText("OK, since you offered Bart a coffee, we will leave you alone. Thank you for your support!"));
+			} else {
+				scheduleCoffeeReminder(true);
+			}
+		}
+	}
+
+	static QPushButton *createTopToggleButton(const QString &text, const QString &tooltip)
+	{
 		auto *button = new QPushButton(text);
 		button->setObjectName("TopToggle");
 		button->setCheckable(true);
@@ -2327,8 +2361,8 @@ private:
 		return QIcon(pixmap);
 	}
 
-		static QIcon yellowBuddyIcon()
-		{
+	static QIcon yellowBuddyIcon()
+	{
 		QPixmap pixmap(48, 48);
 		pixmap.fill(Qt::transparent);
 
@@ -2354,70 +2388,70 @@ private:
 		painter.setPen(QPen(QColor(95, 63, 28), 2.0, Qt::SolidLine, Qt::RoundCap));
 		painter.drawLine(QPointF(18.0, 36.0), QPointF(30.0, 36.0));
 
-			return QIcon(pixmap);
+		return QIcon(pixmap);
+	}
+
+	static QIcon kofiIcon()
+	{
+		char *path = obs_module_file("kofi_logo.png");
+		if (path) {
+			QPixmap pixmap(QString::fromUtf8(path));
+			bfree(path);
+			if (!pixmap.isNull())
+				return QIcon(pixmap);
 		}
 
-		static QIcon kofiIcon()
-		{
-			char *path = obs_module_file("kofi_logo.png");
-			if (path) {
-				QPixmap pixmap(QString::fromUtf8(path));
-				bfree(path);
-				if (!pixmap.isNull())
-					return QIcon(pixmap);
-			}
+		QPixmap pixmap(48, 48);
+		pixmap.fill(Qt::transparent);
+		QPainter painter(&pixmap);
+		painter.setRenderHint(QPainter::Antialiasing, true);
+		painter.setPen(QPen(QColor(35, 37, 42), 4.0));
+		painter.setBrush(Qt::white);
+		painter.drawRoundedRect(QRectF(6.0, 10.0, 34.0, 27.0), 10.0, 10.0);
+		painter.drawArc(QRectF(31.0, 14.0, 13.0, 15.0), -80 * 16, 230 * 16);
+		painter.setPen(Qt::NoPen);
+		painter.setBrush(QColor(255, 95, 24));
+		QPainterPath heart;
+		heart.moveTo(24.0, 31.0);
+		heart.cubicTo(15.0, 24.0, 13.0, 18.0, 18.0, 16.0);
+		heart.cubicTo(21.0, 14.8, 23.2, 17.0, 24.0, 18.5);
+		heart.cubicTo(24.8, 17.0, 27.0, 14.8, 30.0, 16.0);
+		heart.cubicTo(35.0, 18.0, 33.0, 24.0, 24.0, 31.0);
+		painter.drawPath(heart);
+		return QIcon(pixmap);
+	}
 
-			QPixmap pixmap(48, 48);
-			pixmap.fill(Qt::transparent);
-			QPainter painter(&pixmap);
-			painter.setRenderHint(QPainter::Antialiasing, true);
-			painter.setPen(QPen(QColor(35, 37, 42), 4.0));
-			painter.setBrush(Qt::white);
-			painter.drawRoundedRect(QRectF(6.0, 10.0, 34.0, 27.0), 10.0, 10.0);
-			painter.drawArc(QRectF(31.0, 14.0, 13.0, 15.0), -80 * 16, 230 * 16);
-			painter.setPen(Qt::NoPen);
-			painter.setBrush(QColor(255, 95, 24));
-			QPainterPath heart;
-			heart.moveTo(24.0, 31.0);
-			heart.cubicTo(15.0, 24.0, 13.0, 18.0, 18.0, 16.0);
-			heart.cubicTo(21.0, 14.8, 23.2, 17.0, 24.0, 18.5);
-			heart.cubicTo(24.8, 17.0, 27.0, 14.8, 30.0, 16.0);
-			heart.cubicTo(35.0, 18.0, 33.0, 24.0, 24.0, 31.0);
-			painter.drawPath(heart);
-			return QIcon(pixmap);
-		}
+	static QIcon clapIcon()
+	{
+		QPixmap pixmap(48, 48);
+		pixmap.fill(Qt::transparent);
 
-		static QIcon clapIcon()
-		{
-			QPixmap pixmap(48, 48);
-			pixmap.fill(Qt::transparent);
+		QPainter painter(&pixmap);
+		painter.setRenderHint(QPainter::Antialiasing, true);
+		painter.setPen(QPen(QColor(230, 234, 242), 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+		painter.setBrush(QColor(35, 40, 50));
+		painter.drawRoundedRect(QRectF(8.0, 18.0, 32.0, 22.0), 3.0, 3.0);
 
-			QPainter painter(&pixmap);
-			painter.setRenderHint(QPainter::Antialiasing, true);
-			painter.setPen(QPen(QColor(230, 234, 242), 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-			painter.setBrush(QColor(35, 40, 50));
-			painter.drawRoundedRect(QRectF(8.0, 18.0, 32.0, 22.0), 3.0, 3.0);
+		painter.setBrush(QColor(230, 234, 242));
+		painter.drawRect(QRectF(8.0, 18.0, 32.0, 7.0));
+		painter.setPen(QPen(QColor(35, 40, 50), 3.0));
+		for (int i = -2; i < 5; ++i)
+			painter.drawLine(QPointF(8.0 + i * 10.0, 25.0), QPointF(15.0 + i * 10.0, 18.0));
 
-			painter.setBrush(QColor(230, 234, 242));
-			painter.drawRect(QRectF(8.0, 18.0, 32.0, 7.0));
-			painter.setPen(QPen(QColor(35, 40, 50), 3.0));
-			for (int i = -2; i < 5; ++i)
-				painter.drawLine(QPointF(8.0 + i * 10.0, 25.0), QPointF(15.0 + i * 10.0, 18.0));
+		painter.setPen(QPen(QColor(230, 234, 242), 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+		painter.setBrush(QColor(35, 40, 50));
+		QPolygonF top;
+		top << QPointF(8.0, 16.0) << QPointF(38.0, 7.0) << QPointF(40.0, 14.0) << QPointF(10.0, 23.0);
+		painter.drawPolygon(top);
+		painter.setPen(QPen(QColor(230, 234, 242), 2.5));
+		for (int i = -1; i < 5; ++i)
+			painter.drawLine(QPointF(9.0 + i * 9.0, 20.0), QPointF(15.0 + i * 9.0, 11.0));
 
-			painter.setPen(QPen(QColor(230, 234, 242), 3.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-			painter.setBrush(QColor(35, 40, 50));
-			QPolygonF top;
-			top << QPointF(8.0, 16.0) << QPointF(38.0, 7.0) << QPointF(40.0, 14.0) << QPointF(10.0, 23.0);
-			painter.drawPolygon(top);
-			painter.setPen(QPen(QColor(230, 234, 242), 2.5));
-			for (int i = -1; i < 5; ++i)
-				painter.drawLine(QPointF(9.0 + i * 9.0, 20.0), QPointF(15.0 + i * 9.0, 11.0));
-
-			painter.setPen(QPen(QColor(82, 92, 112), 1.5));
-			painter.drawLine(QPointF(13.0, 31.0), QPointF(35.0, 31.0));
-			painter.drawLine(QPointF(13.0, 36.0), QPointF(30.0, 36.0));
-			return QIcon(pixmap);
-		}
+		painter.setPen(QPen(QColor(82, 92, 112), 1.5));
+		painter.drawLine(QPointF(13.0, 31.0), QPointF(35.0, 31.0));
+		painter.drawLine(QPointF(13.0, 36.0), QPointF(30.0, 36.0));
+		return QIcon(pixmap);
+	}
 
 	static QIcon fitIcon(bool outward)
 	{
@@ -2428,8 +2462,8 @@ private:
 		painter.setPen(QPen(QColor(230, 234, 242), 4.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
 
 		const QPointF center(24.0, 24.0);
-		const std::array<QPointF, 4> corners = {QPointF(10.0, 10.0), QPointF(38.0, 10.0),
-							QPointF(10.0, 38.0), QPointF(38.0, 38.0)};
+		const std::array<QPointF, 4> corners = {QPointF(10.0, 10.0), QPointF(38.0, 10.0), QPointF(10.0, 38.0),
+							QPointF(38.0, 38.0)};
 		for (const QPointF &corner : corners) {
 			const QPointF start = outward ? center + (corner - center) * 0.35 : corner;
 			const QPointF end = outward ? corner : center + (corner - center) * 0.35;
@@ -2459,15 +2493,9 @@ private:
 		return QIcon(pixmap);
 	}
 
-	static int colorCode(int r, int g, int b)
-	{
-		return ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
-	}
+	static int colorCode(int r, int g, int b) { return ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF); }
 
-	static QColor colorFromCode(int code)
-	{
-		return QColor((code >> 16) & 0xFF, (code >> 8) & 0xFF, code & 0xFF);
-	}
+	static QColor colorFromCode(int code) { return QColor((code >> 16) & 0xFF, (code >> 8) & 0xFF, code & 0xFF); }
 
 	void addColorPreset(const QString &name, int r, int g, int b)
 	{
@@ -2480,8 +2508,9 @@ private:
 	{
 		const QColor color(r, g, b);
 		if (colorSwatch) {
-			colorSwatch->setStyleSheet(QString("background: %1; border: 1px solid #6a7280; border-radius: 5px;")
-							   .arg(color.name()));
+			colorSwatch->setStyleSheet(
+				QString("background: %1; border: 1px solid #6a7280; border-radius: 5px;")
+					.arg(color.name()));
 			colorSwatch->setToolTip(QString("Current color: %1").arg(color.name(QColor::HexRgb).toUpper()));
 		}
 		if (!colorPreset)
@@ -2676,9 +2705,9 @@ private:
 		QSignalBlocker blocker(recordingResolution);
 		const int sameCanvasIndex = recordingResolution->findData("same_canvas");
 		if (sameCanvasIndex >= 0) {
-			recordingResolution->setItemText(
-				sameCanvasIndex,
-				QString("%1 (%2)").arg(trText("Same as canvas"), currentCanvasResolutionLabel()));
+			recordingResolution->setItemText(sameCanvasIndex,
+							 QString("%1 (%2)").arg(trText("Same as canvas"),
+										currentCanvasResolutionLabel()));
 		}
 	}
 
@@ -2977,13 +3006,11 @@ private:
 				      armedButton && armedButton->isChecked() ? trText("Armed") : trText("Disarmed"),
 				      armedButton && armedButton->isChecked() ? trText("Armed") : trText("Disarmed"),
 				      armedButtonLabel);
-		updateTopToggleButton(showOverlayButton,
-				      showOverlayButton && showOverlayButton->isChecked() ? "👁" : "✕",
-				      showOverlayButton && showOverlayButton->isChecked() ? trText("Hide")
-											  : trText("Overlay"),
-				      showOverlayButton && showOverlayButton->isChecked() ? trText("Overlay")
-											  : trText("Hide"),
-				      showOverlayButtonLabel);
+		updateTopToggleButton(
+			showOverlayButton, showOverlayButton && showOverlayButton->isChecked() ? "👁" : "✕",
+			showOverlayButton && showOverlayButton->isChecked() ? trText("Hide") : trText("Overlay"),
+			showOverlayButton && showOverlayButton->isChecked() ? trText("Overlay") : trText("Hide"),
+			showOverlayButtonLabel);
 	}
 
 	void updateTopToggleButton(QPushButton *button, const QString &text, const QString &tooltip,
@@ -3030,11 +3057,11 @@ private:
 		hidePreviewPickHint();
 		removePreviewPickEventFilters();
 
-			updateSettings([](obs_data_t *settings) {
-				obs_data_set_bool(settings, "auto_detect_center_pending", true);
-				obs_data_set_bool(settings, "show_overlay", true);
-				obs_data_set_string(settings, "auto_detect_center_result", "waiting");
-			});
+		updateSettings([](obs_data_t *settings) {
+			obs_data_set_bool(settings, "auto_detect_center_pending", true);
+			obs_data_set_bool(settings, "show_overlay", true);
+			obs_data_set_string(settings, "auto_detect_center_result", "waiting");
+		});
 		setBlocked(showOverlayButton, true);
 		updateTopToggleButtons();
 		setTemporaryStatus(trText("Automatic detection requested..."), 4);
@@ -3267,8 +3294,8 @@ private:
 		pickMode = PickMode::None;
 		const double width = ocrWidth ? storedValueForDoubleKey("ocr_width", ocrWidth->value()) : 0.14;
 		const double height = ocrHeight ? storedValueForDoubleKey("ocr_height", ocrHeight->value()) : 0.05;
-			const double newX = std::clamp(x - width * 0.5, 0.0, std::max(0.0, 1.0 - width));
-			const double newY = std::clamp(y - height * 0.5, 0.0, std::max(0.0, 1.0 - height));
+		const double newX = std::clamp(x - width * 0.5, 0.0, std::max(0.0, 1.0 - width));
+		const double newY = std::clamp(y - height * 0.5, 0.0, std::max(0.0, 1.0 - height));
 		updateSettings([newX, newY](obs_data_t *settings) {
 			obs_data_set_double(settings, "ocr_x", newX);
 			obs_data_set_double(settings, "ocr_y", newY);
@@ -3418,96 +3445,95 @@ private:
 		const int height = previewPickHint->height() + 8;
 		const int x = (preview->width() - width) / 2;
 		const int y = std::max(18, preview->height() / 8);
-			previewPickHint->setGeometry(x, y, width, height);
-			previewPickHint->show();
-			previewPickHint->raise();
-			connect(previewPickHint, &QObject::destroyed, this, [this]() { previewPickHint = nullptr; });
-			QPointer<QLabel> hint(previewPickHint);
-			QTimer::singleShot(4500, this, [this, hint]() {
-				if (hint && previewPickHint == hint)
-					hidePreviewPickHint();
-			});
-		}
+		previewPickHint->setGeometry(x, y, width, height);
+		previewPickHint->show();
+		previewPickHint->raise();
+		connect(previewPickHint, &QObject::destroyed, this, [this]() { previewPickHint = nullptr; });
+		QPointer<QLabel> hint(previewPickHint);
+		QTimer::singleShot(4500, this, [this, hint]() {
+			if (hint && previewPickHint == hint)
+				hidePreviewPickHint();
+		});
+	}
 
-		void showPreviewResultToast(const QString &text, bool success)
-		{
-			QWidget *preview = mainPreviewWidget();
-			if (!preview)
-				return;
+	void showPreviewResultToast(const QString &text, bool success)
+	{
+		QWidget *preview = mainPreviewWidget();
+		if (!preview)
+			return;
 
-			if (previewResultToast && previewResultToastKey == text && previewResultToastSuccess == success) {
-				updatePreviewResultToastText();
-				previewResultToast->raise();
-				return;
-			}
-
-			hidePreviewResultToast();
-			previewResultToastKey = text;
-			previewResultToastSuccess = success;
-			previewResultToast = new QLabel(resultToastText(), preview);
-			previewResultToast->setAlignment(Qt::AlignCenter);
-			previewResultToast->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-			previewResultToast->setStyleSheet(
-				QString("background: rgba(10, 12, 18, 210); color: white; border: 3px solid %1;"
-					"border-radius: 10px; padding: 14px 24px; font-size: 28px; font-weight: 900;")
-					.arg(success ? "rgba(40, 210, 95, 235)" : "rgba(235, 65, 65, 235)"));
-			previewResultToast->adjustSize();
-			const int width = std::min(previewResultToast->width() + 28, std::max(260, preview->width() - 60));
-			const int height = previewResultToast->height() + 10;
-			const int x = (preview->width() - width) / 2;
-			const int y = (preview->height() - height) / 2;
-			previewResultToast->setGeometry(x, y, width, height);
-			previewResultToast->show();
+		if (previewResultToast && previewResultToastKey == text && previewResultToastSuccess == success) {
+			updatePreviewResultToastText();
 			previewResultToast->raise();
-			connect(previewResultToast, &QObject::destroyed, this, [this]() { previewResultToast = nullptr; });
-			QPointer<QLabel> toast(previewResultToast);
-			QTimer::singleShot(2500, this, [this, toast]() {
-				if (toast && previewResultToast == toast)
-					hidePreviewResultToast();
-			});
+			return;
 		}
 
-		QString resultToastText() const
-		{
-			if (previewResultToastKey.isEmpty())
-				return QString();
-			return QString("%1 %2")
-				.arg(previewResultToastSuccess ? QStringLiteral("✓") : QStringLiteral("✕"),
-				     trText(previewResultToastKey));
-		}
+		hidePreviewResultToast();
+		previewResultToastKey = text;
+		previewResultToastSuccess = success;
+		previewResultToast = new QLabel(resultToastText(), preview);
+		previewResultToast->setAlignment(Qt::AlignCenter);
+		previewResultToast->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+		previewResultToast->setStyleSheet(
+			QString("background: rgba(10, 12, 18, 210); color: white; border: 3px solid %1;"
+				"border-radius: 10px; padding: 14px 24px; font-size: 28px; font-weight: 900;")
+				.arg(success ? "rgba(40, 210, 95, 235)" : "rgba(235, 65, 65, 235)"));
+		previewResultToast->adjustSize();
+		const int width = std::min(previewResultToast->width() + 28, std::max(260, preview->width() - 60));
+		const int height = previewResultToast->height() + 10;
+		const int x = (preview->width() - width) / 2;
+		const int y = (preview->height() - height) / 2;
+		previewResultToast->setGeometry(x, y, width, height);
+		previewResultToast->show();
+		previewResultToast->raise();
+		connect(previewResultToast, &QObject::destroyed, this, [this]() { previewResultToast = nullptr; });
+		QPointer<QLabel> toast(previewResultToast);
+		QTimer::singleShot(2500, this, [this, toast]() {
+			if (toast && previewResultToast == toast)
+				hidePreviewResultToast();
+		});
+	}
 
-		void updatePreviewResultToastText()
-		{
-			if (!previewResultToast)
-				return;
+	QString resultToastText() const
+	{
+		if (previewResultToastKey.isEmpty())
+			return QString();
+		return QString("%1 %2").arg(previewResultToastSuccess ? QStringLiteral("✓") : QStringLiteral("✕"),
+					    trText(previewResultToastKey));
+	}
 
-			previewResultToast->setText(resultToastText());
-			previewResultToast->adjustSize();
-			QWidget *preview = mainPreviewWidget();
-			if (!preview)
-				return;
+	void updatePreviewResultToastText()
+	{
+		if (!previewResultToast)
+			return;
 
-			const int width = std::min(previewResultToast->width() + 28, std::max(260, preview->width() - 60));
-			const int height = previewResultToast->height() + 10;
-			const int x = (preview->width() - width) / 2;
-			const int y = (preview->height() - height) / 2;
-			previewResultToast->setGeometry(x, y, width, height);
-		}
+		previewResultToast->setText(resultToastText());
+		previewResultToast->adjustSize();
+		QWidget *preview = mainPreviewWidget();
+		if (!preview)
+			return;
 
-		void hidePreviewResultToast()
-		{
-			if (!previewResultToast)
-				return;
-			QLabel *toast = previewResultToast;
-			previewResultToast = nullptr;
-			previewResultToastKey.clear();
-			toast->hide();
-			toast->setParent(nullptr);
-			toast->deleteLater();
-		}
+		const int width = std::min(previewResultToast->width() + 28, std::max(260, preview->width() - 60));
+		const int height = previewResultToast->height() + 10;
+		const int x = (preview->width() - width) / 2;
+		const int y = (preview->height() - height) / 2;
+		previewResultToast->setGeometry(x, y, width, height);
+	}
 
-		void hidePreviewPickHint()
-		{
+	void hidePreviewResultToast()
+	{
+		if (!previewResultToast)
+			return;
+		QLabel *toast = previewResultToast;
+		previewResultToast = nullptr;
+		previewResultToastKey.clear();
+		toast->hide();
+		toast->setParent(nullptr);
+		toast->deleteLater();
+	}
+
+	void hidePreviewPickHint()
+	{
 		if (!previewPickHint)
 			return;
 		QLabel *hint = previewPickHint;
@@ -3542,63 +3568,63 @@ private:
 		if (widgetWidth <= 0.0 || widgetHeight <= 0.0 || pixelRatio <= 0.0)
 			return false;
 
-			const double baseWidth = static_cast<double>(videoInfo.base_width);
-			const double baseHeight = static_cast<double>(videoInfo.base_height);
-			const double availableWidth = widgetWidth - PREVIEW_EDGE_SIZE_LOCAL * 2.0;
-			const double availableHeight = widgetHeight - PREVIEW_EDGE_SIZE_LOCAL * 2.0;
-			if (availableWidth <= 0.0 || availableHeight <= 0.0)
-				return false;
+		const double baseWidth = static_cast<double>(videoInfo.base_width);
+		const double baseHeight = static_cast<double>(videoInfo.base_height);
+		const double availableWidth = widgetWidth - PREVIEW_EDGE_SIZE_LOCAL * 2.0;
+		const double availableHeight = widgetHeight - PREVIEW_EDGE_SIZE_LOCAL * 2.0;
+		if (availableWidth <= 0.0 || availableHeight <= 0.0)
+			return false;
 
-			double scale = 1.0;
-			double offsetX = 0.0;
-			double offsetY = 0.0;
-			const double windowAspect = availableWidth / availableHeight;
-			const double baseAspect = baseWidth / baseHeight;
+		double scale = 1.0;
+		double offsetX = 0.0;
+		double offsetY = 0.0;
+		const double windowAspect = availableWidth / availableHeight;
+		const double baseAspect = baseWidth / baseHeight;
 
-			auto fitPreview = [&]() {
-				double drawnWidth = availableWidth;
-				double drawnHeight = availableHeight;
-				if (windowAspect > baseAspect) {
-					scale = availableHeight / baseHeight;
-					drawnWidth = availableHeight * baseAspect;
-				} else {
-					scale = availableWidth / baseWidth;
-					drawnHeight = availableWidth / baseAspect;
-				}
-				offsetX = availableWidth * 0.5 - drawnWidth * 0.5;
-				offsetY = availableHeight * 0.5 - drawnHeight * 0.5;
-			};
+		auto fitPreview = [&]() {
+			double drawnWidth = availableWidth;
+			double drawnHeight = availableHeight;
+			if (windowAspect > baseAspect) {
+				scale = availableHeight / baseHeight;
+				drawnWidth = availableHeight * baseAspect;
+			} else {
+				scale = availableWidth / baseWidth;
+				drawnHeight = availableWidth / baseAspect;
+			}
+			offsetX = availableWidth * 0.5 - drawnWidth * 0.5;
+			offsetY = availableHeight * 0.5 - drawnHeight * 0.5;
+		};
 
-			QComboBox *scalingMode = mainWindowComboBox("previewScalingMode");
-			QScrollBar *scrollX = mainWindowScrollBar("previewXScrollBar");
-			QScrollBar *scrollY = mainWindowScrollBar("previewYScrollBar");
-			const int scalingIndex = scalingMode ? scalingMode->currentIndex() : 0;
-			const bool hasScroll = (scrollX && scrollX->isVisible() && scrollX->maximum() > scrollX->minimum()) ||
-					       (scrollY && scrollY->isVisible() && scrollY->maximum() > scrollY->minimum());
-			const bool fixedScale = scalingIndex != 0 || hasScroll;
+		QComboBox *scalingMode = mainWindowComboBox("previewScalingMode");
+		QScrollBar *scrollX = mainWindowScrollBar("previewXScrollBar");
+		QScrollBar *scrollY = mainWindowScrollBar("previewYScrollBar");
+		const int scalingIndex = scalingMode ? scalingMode->currentIndex() : 0;
+		const bool hasScroll = (scrollX && scrollX->isVisible() && scrollX->maximum() > scrollX->minimum()) ||
+				       (scrollY && scrollY->isVisible() && scrollY->maximum() > scrollY->minimum());
+		const bool fixedScale = scalingIndex != 0 || hasScroll;
 
-			if (fixedScale) {
-				if (scalingIndex == 1) {
-					scale = 1.0;
-				} else if (scalingIndex == 2 && videoInfo.output_width > 0) {
-					scale = static_cast<double>(videoInfo.output_width) / baseWidth;
-				} else {
-					fitPreview();
-					scale = previewScaleFromLabel(scale);
-				}
-
-				offsetX = (availableWidth - baseWidth * scale) * 0.5;
-				offsetY = (availableHeight - baseHeight * scale) * 0.5;
-				if (scrollX)
-					offsetX -= static_cast<double>(scrollX->value());
-				if (scrollY)
-					offsetY -= static_cast<double>(scrollY->value());
+		if (fixedScale) {
+			if (scalingIndex == 1) {
+				scale = 1.0;
+			} else if (scalingIndex == 2 && videoInfo.output_width > 0) {
+				scale = static_cast<double>(videoInfo.output_width) / baseWidth;
 			} else {
 				fitPreview();
+				scale = previewScaleFromLabel(scale);
 			}
 
-			offsetX += PREVIEW_EDGE_SIZE_LOCAL;
-			offsetY += PREVIEW_EDGE_SIZE_LOCAL;
+			offsetX = (availableWidth - baseWidth * scale) * 0.5;
+			offsetY = (availableHeight - baseHeight * scale) * 0.5;
+			if (scrollX)
+				offsetX -= static_cast<double>(scrollX->value());
+			if (scrollY)
+				offsetY -= static_cast<double>(scrollY->value());
+		} else {
+			fitPreview();
+		}
+
+		offsetX += PREVIEW_EDGE_SIZE_LOCAL;
+		offsetY += PREVIEW_EDGE_SIZE_LOCAL;
 
 		const double physicalX = local.x() * pixelRatio;
 		const double physicalY = local.y() * pixelRatio;
@@ -3639,23 +3665,24 @@ private:
 
 		x = std::clamp(static_cast<double>(sourcePos.x) / static_cast<double>(sourceWidth), 0.0, 1.0);
 		y = std::clamp(static_cast<double>(sourcePos.y) / static_cast<double>(sourceHeight), 0.0, 1.0);
-			lastPickDebug = QString("debug mode=%1 idx=%2 scale=%3 scroll=%4,%5 local=%6,%7 physical=%8,%9 canvas=%10,%11 source=%12 px=%13,%14 norm=%15,%16")
-						.arg(fixedScale ? QString("fixed") : QString("fit"))
-						.arg(scalingIndex)
-						.arg(scale, 0, 'f', 4)
-						.arg(scrollX ? scrollX->value() : 0)
-						.arg(scrollY ? scrollY->value() : 0)
-						.arg(local.x(), 0, 'f', 1)
-						.arg(local.y(), 0, 'f', 1)
-						.arg(physicalX, 0, 'f', 1)
-						.arg(physicalY, 0, 'f', 1)
-						.arg(canvasX, 0, 'f', 1)
-					.arg(canvasY, 0, 'f', 1)
-					.arg(sourceName ? QString::fromUtf8(sourceName) : QString("-"))
-					.arg(sourcePos.x, 0, 'f', 1)
-					.arg(sourcePos.y, 0, 'f', 1)
-					.arg(x, 0, 'f', 4)
-					.arg(y, 0, 'f', 4);
+		lastPickDebug =
+			QString("debug mode=%1 idx=%2 scale=%3 scroll=%4,%5 local=%6,%7 physical=%8,%9 canvas=%10,%11 source=%12 px=%13,%14 norm=%15,%16")
+				.arg(fixedScale ? QString("fixed") : QString("fit"))
+				.arg(scalingIndex)
+				.arg(scale, 0, 'f', 4)
+				.arg(scrollX ? scrollX->value() : 0)
+				.arg(scrollY ? scrollY->value() : 0)
+				.arg(local.x(), 0, 'f', 1)
+				.arg(local.y(), 0, 'f', 1)
+				.arg(physicalX, 0, 'f', 1)
+				.arg(physicalY, 0, 'f', 1)
+				.arg(canvasX, 0, 'f', 1)
+				.arg(canvasY, 0, 'f', 1)
+				.arg(sourceName ? QString::fromUtf8(sourceName) : QString("-"))
+				.arg(sourcePos.x, 0, 'f', 1)
+				.arg(sourcePos.y, 0, 'f', 1)
+				.arg(x, 0, 'f', 4)
+				.arg(y, 0, 'f', 4);
 		blog(LOG_INFO, "RecPilot pick %s", lastPickDebug.toUtf8().constData());
 		return true;
 	}
@@ -3755,15 +3782,9 @@ private:
 		return displayValue;
 	}
 
-	static double clipNameWidthMax()
-	{
-		return REC_PILOT_CLIP_NAME_WIDTH_MAX;
-	}
+	static double clipNameWidthMax() { return REC_PILOT_CLIP_NAME_WIDTH_MAX; }
 
-	static double clipNameHeightMax()
-	{
-		return REC_PILOT_CLIP_NAME_HEIGHT_MAX;
-	}
+	static double clipNameHeightMax() { return REC_PILOT_CLIP_NAME_HEIGHT_MAX; }
 
 	static double radiusStoredToDisplay(double storedValue)
 	{
@@ -3944,8 +3965,8 @@ private:
 					const double oldX = obs_data_get_double(settings, "ocr_x");
 					const double oldWidth = obs_data_get_double(settings, "ocr_width");
 					const double center = oldX + oldWidth * 0.5;
-					const double newX = std::clamp(center - value * 0.5, 0.0,
-								       std::max(0.0, 1.0 - value));
+					const double newX =
+						std::clamp(center - value * 0.5, 0.0, std::max(0.0, 1.0 - value));
 					obs_data_set_double(settings, "ocr_x", newX);
 					obs_data_set_double(settings, "ocr_width", value);
 					setBlocked(ocrX, newX);
@@ -3953,8 +3974,8 @@ private:
 					const double oldY = obs_data_get_double(settings, "ocr_y");
 					const double oldHeight = obs_data_get_double(settings, "ocr_height");
 					const double center = oldY + oldHeight * 0.5;
-					const double newY = std::clamp(center - value * 0.5, 0.0,
-								       std::max(0.0, 1.0 - value));
+					const double newY =
+						std::clamp(center - value * 0.5, 0.0, std::max(0.0, 1.0 - value));
 					obs_data_set_double(settings, "ocr_y", newY);
 					obs_data_set_double(settings, "ocr_height", value);
 					setBlocked(ocrY, newY);

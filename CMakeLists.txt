@@ -56,12 +56,24 @@ endif()
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
 
-add_custom_command(
-  TARGET ${CMAKE_PROJECT_NAME}
-  POST_BUILD
-  COMMAND
-    "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/data/kofi_logo.png"
-    "$<TARGET_BUNDLE_DIR:${CMAKE_PROJECT_NAME}>/Contents/Resources/kofi_logo.png"
-  COMMENT "Copy Ko-fi logo into plugin resources"
-  VERBATIM
-)
+if(APPLE)
+  add_custom_command(
+    TARGET ${CMAKE_PROJECT_NAME}
+    POST_BUILD
+    COMMAND
+      "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/data/kofi_logo.png"
+      "$<TARGET_BUNDLE_DIR:${CMAKE_PROJECT_NAME}>/Contents/Resources/kofi_logo.png"
+    COMMENT "Copy Ko-fi logo into plugin resources"
+    VERBATIM
+  )
+else()
+  add_custom_command(
+    TARGET ${CMAKE_PROJECT_NAME}
+    POST_BUILD
+    COMMAND
+      "${CMAKE_COMMAND}" -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/data/kofi_logo.png"
+      "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/kofi_logo.png"
+    COMMENT "Copy Ko-fi logo into plugin resources"
+    VERBATIM
+  )
+endif()
