@@ -54,6 +54,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSignalBlocker>
+#include <QSizePolicy>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -64,6 +65,7 @@
 #include <QStyle>
 #include <QTimer>
 #include <QToolButton>
+#include <QTransform>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
