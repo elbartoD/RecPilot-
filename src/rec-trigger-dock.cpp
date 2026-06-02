@@ -119,6 +119,12 @@ enum class DockLanguage {
 	Minion,
 };
 
+enum class ClipNameSizeMode {
+	Both,
+	Horizontal,
+	Vertical,
+};
+
 struct DetectionPreset {
 	const char *name;
 	double center_x;
@@ -198,6 +204,10 @@ public:
 			"QPushButton#RecButton[recording=\"true\"] { background: #e62626; border: 2px solid #ffb3b3; color: #ffffff; }"
 			"QPushButton#RecButton[recording=\"false\"] { background: #303642; border: 2px solid #6a7280; color: #f2f3f5; }"
 			"QDoubleSpinBox, QSpinBox { background: #101218; border: 1px solid #394050; border-radius: 5px; padding: 3px; }"
+			"QPushButton#NudgeButton { min-width: 34px; max-width: 34px; min-height: 30px; max-height: 30px;"
+			"padding: 0; font-size: 15px; font-weight: 800; }"
+			"QPushButton#NudgeMode { min-width: 46px; max-width: 46px; min-height: 30px; max-height: 30px;"
+			"padding: 0; font-size: 12px; font-weight: 800; }"
 			"QSlider::groove:horizontal { height: 5px; background: #363c48; border-radius: 2px; }"
 			"QSlider::handle:horizontal { width: 14px; margin: -5px 0; border-radius: 7px; background: #ff4d3d; }");
 
@@ -402,9 +412,10 @@ public:
 		selectCenterButton->setIconSize(QSize(22, 22));
 		selectCenterButton->setToolTip("Click, then choose the detection point in the main OBS preview");
 		detectionLayout->addWidget(selectCenterButton);
-		addDoubleControl(detectionLayout, "Detection center X", centerX, "center_x", 0.0, 100.0, 0.1, 1);
-		addDoubleControl(detectionLayout, "Detection center Y", centerY, "center_y", 0.0, 100.0, 0.1, 1);
-		addDoubleControl(detectionLayout, "Detection radius", radius, "radius", 0.0, 100.0, 1.0, 0);
+		createHiddenDoubleControl(centerX, 0.0, 100.0, 0.1, 1);
+		createHiddenDoubleControl(centerY, 0.0, 100.0, 0.1, 1);
+		createHiddenDoubleControl(radius, 0.0, 100.0, 1.0, 0);
+		addDetectionNudgePad(detectionLayout);
 		detectionLayout->addStretch();
 		sections->addWidget(makePageScroll(detectionPage));
 
@@ -432,10 +443,11 @@ public:
 		selectClipNameButton->setToolTip(
 			"Click, then choose the center of the clip name text in the main OBS preview");
 		clipLayout->addWidget(selectClipNameButton);
-		addDoubleControl(clipLayout, "Clip name X", ocrX, "ocr_x", 0.0, 1.0, 0.001, 3);
-		addDoubleControl(clipLayout, "Clip name Y", ocrY, "ocr_y", 0.0, 1.0, 0.001, 3);
-		addDoubleControl(clipLayout, "Clip name width", ocrWidth, "ocr_width", 0.0, 100.0, 1.0, 0);
-		addDoubleControl(clipLayout, "Clip name height", ocrHeight, "ocr_height", 0.0, 100.0, 1.0, 0);
+		createHiddenDoubleControl(ocrX, 0.0, 1.0, 0.001, 3);
+		createHiddenDoubleControl(ocrY, 0.0, 1.0, 0.001, 3);
+		createHiddenDoubleControl(ocrWidth, 0.0, 100.0, 1.0, 0);
+		createHiddenDoubleControl(ocrHeight, 0.0, 100.0, 1.0, 0);
+		addClipNameNudgePad(clipLayout);
 		clipLayout->addStretch();
 		sections->addWidget(makePageScroll(clipPage));
 
@@ -865,6 +877,7 @@ private:
 	QJsonArray customPresets;
 	PickMode pickMode = PickMode::None;
 	DockLanguage language = DockLanguage::English;
+	ClipNameSizeMode clipNameSizeMode = ClipNameSizeMode::Both;
 	bool recordingOutputUpdatesReady = false;
 	bool pendingRecordingCodecApply = false;
 	bool coffeeDialogVisible = false;
@@ -4017,6 +4030,170 @@ private:
 	{
 		for (const auto &entry : doubleSliders)
 			syncDoubleSlider(entry.first);
+	}
+
+	void createHiddenDoubleControl(QDoubleSpinBox *&box, double min, double max, double step, int decimals)
+	{
+		box = new QDoubleSpinBox(this);
+		box->setRange(min, max);
+		box->setSingleStep(step);
+		box->setDecimals(decimals);
+		box->setKeyboardTracking(false);
+		box->hide();
+	}
+
+	QPushButton *createNudgeButton(const QString &text, const QString &tooltip)
+	{
+		auto *button = new QPushButton(text);
+		button->setObjectName("NudgeButton");
+		button->setToolTip(tooltip);
+		return button;
+	}
+
+	QPushButton *createNudgeModeButton()
+	{
+		auto *button = new QPushButton(clipNameSizeModeText());
+		button->setObjectName("NudgeMode");
+		button->setToolTip("Toggle size mode");
+		return button;
+	}
+
+	QString clipNameSizeModeText() const
+	{
+		switch (clipNameSizeMode) {
+		case ClipNameSizeMode::Horizontal:
+			return "H";
+		case ClipNameSizeMode::Vertical:
+			return "V";
+		case ClipNameSizeMode::Both:
+		default:
+			return "HV";
+		}
+	}
+
+	void setDisplayDouble(QDoubleSpinBox *box, const char *key, double displayValue)
+	{
+		if (!box)
+			return;
+
+		const double clamped = std::clamp(displayValue, box->minimum(), box->maximum());
+		setBlocked(box, clamped);
+		setDouble(key, storedValueForDoubleKey(key, clamped));
+		syncDoubleSliders();
+	}
+
+	void nudgeDetectionCenter(double deltaX, double deltaY)
+	{
+		setDisplayDouble(centerX, "center_x", (centerX ? centerX->value() : 50.0) + deltaX);
+		setDisplayDouble(centerY, "center_y", (centerY ? centerY->value() : 50.0) + deltaY);
+	}
+
+	void nudgeDetectionRadius(double delta)
+	{
+		setDisplayDouble(radius, "radius", (radius ? radius->value() : 50.0) + delta);
+	}
+
+	void nudgeClipNameCenter(double deltaX, double deltaY)
+	{
+		setDisplayDouble(ocrX, "ocr_x", (ocrX ? ocrX->value() : 0.5) + deltaX);
+		setDisplayDouble(ocrY, "ocr_y", (ocrY ? ocrY->value() : 0.5) + deltaY);
+	}
+
+	void nudgeClipNameSize(double delta)
+	{
+		if (clipNameSizeMode == ClipNameSizeMode::Both || clipNameSizeMode == ClipNameSizeMode::Horizontal)
+			setDisplayDouble(ocrWidth, "ocr_width", (ocrWidth ? ocrWidth->value() : 50.0) + delta);
+		if (clipNameSizeMode == ClipNameSizeMode::Both || clipNameSizeMode == ClipNameSizeMode::Vertical)
+			setDisplayDouble(ocrHeight, "ocr_height", (ocrHeight ? ocrHeight->value() : 50.0) + delta);
+	}
+
+	void cycleClipNameSizeMode(QPushButton *button)
+	{
+		if (clipNameSizeMode == ClipNameSizeMode::Both)
+			clipNameSizeMode = ClipNameSizeMode::Horizontal;
+		else if (clipNameSizeMode == ClipNameSizeMode::Horizontal)
+			clipNameSizeMode = ClipNameSizeMode::Vertical;
+		else
+			clipNameSizeMode = ClipNameSizeMode::Both;
+		if (button)
+			button->setText(clipNameSizeModeText());
+	}
+
+	void addDetectionNudgePad(QVBoxLayout *layout)
+	{
+		auto *grid = new QGridLayout();
+		grid->setContentsMargins(0, 4, 0, 0);
+		grid->setHorizontalSpacing(6);
+		grid->setVerticalSpacing(6);
+		grid->setColumnStretch(0, 1);
+		grid->setColumnStretch(4, 1);
+
+		auto *up = createNudgeButton("↑", "Move up");
+		auto *down = createNudgeButton("↓", "Move down");
+		auto *left = createNudgeButton("←", "Move left");
+		auto *right = createNudgeButton("→", "Move right");
+		auto *plus = createNudgeButton("+", "Increase detection radius");
+		auto *minus = createNudgeButton("-", "Decrease detection radius");
+
+		auto *sizeButtons = new QHBoxLayout();
+		sizeButtons->setContentsMargins(0, 0, 0, 0);
+		sizeButtons->setSpacing(4);
+		sizeButtons->addWidget(minus);
+		sizeButtons->addWidget(plus);
+
+		grid->addWidget(up, 0, 2, Qt::AlignCenter);
+		grid->addWidget(left, 1, 1, Qt::AlignCenter);
+		grid->addLayout(sizeButtons, 1, 2, Qt::AlignCenter);
+		grid->addWidget(right, 1, 3, Qt::AlignCenter);
+		grid->addWidget(down, 2, 2, Qt::AlignCenter);
+		layout->addLayout(grid);
+
+		connect(up, &QPushButton::clicked, this, [this]() { nudgeDetectionCenter(0.0, -0.1); });
+		connect(down, &QPushButton::clicked, this, [this]() { nudgeDetectionCenter(0.0, 0.1); });
+		connect(left, &QPushButton::clicked, this, [this]() { nudgeDetectionCenter(-0.1, 0.0); });
+		connect(right, &QPushButton::clicked, this, [this]() { nudgeDetectionCenter(0.1, 0.0); });
+		connect(plus, &QPushButton::clicked, this, [this]() { nudgeDetectionRadius(1.0); });
+		connect(minus, &QPushButton::clicked, this, [this]() { nudgeDetectionRadius(-1.0); });
+	}
+
+	void addClipNameNudgePad(QVBoxLayout *layout)
+	{
+		auto *grid = new QGridLayout();
+		grid->setContentsMargins(0, 4, 0, 0);
+		grid->setHorizontalSpacing(6);
+		grid->setVerticalSpacing(6);
+		grid->setColumnStretch(0, 1);
+		grid->setColumnStretch(4, 1);
+
+		auto *up = createNudgeButton("↑", "Move up");
+		auto *down = createNudgeButton("↓", "Move down");
+		auto *left = createNudgeButton("←", "Move left");
+		auto *right = createNudgeButton("→", "Move right");
+		auto *mode = createNudgeModeButton();
+		auto *plus = createNudgeButton("+", "Increase clip name box");
+		auto *minus = createNudgeButton("-", "Decrease clip name box");
+
+		auto *sizeButtons = new QHBoxLayout();
+		sizeButtons->setContentsMargins(0, 0, 0, 0);
+		sizeButtons->setSpacing(4);
+		sizeButtons->addWidget(minus);
+		sizeButtons->addWidget(mode);
+		sizeButtons->addWidget(plus);
+
+		grid->addWidget(up, 0, 2, Qt::AlignCenter);
+		grid->addWidget(left, 1, 1, Qt::AlignCenter);
+		grid->addLayout(sizeButtons, 1, 2, Qt::AlignCenter);
+		grid->addWidget(right, 1, 3, Qt::AlignCenter);
+		grid->addWidget(down, 2, 2, Qt::AlignCenter);
+		layout->addLayout(grid);
+
+		connect(up, &QPushButton::clicked, this, [this]() { nudgeClipNameCenter(0.0, -0.001); });
+		connect(down, &QPushButton::clicked, this, [this]() { nudgeClipNameCenter(0.0, 0.001); });
+		connect(left, &QPushButton::clicked, this, [this]() { nudgeClipNameCenter(-0.001, 0.0); });
+		connect(right, &QPushButton::clicked, this, [this]() { nudgeClipNameCenter(0.001, 0.0); });
+		connect(mode, &QPushButton::clicked, this, [this, mode]() { cycleClipNameSizeMode(mode); });
+		connect(plus, &QPushButton::clicked, this, [this]() { nudgeClipNameSize(1.0); });
+		connect(minus, &QPushButton::clicked, this, [this]() { nudgeClipNameSize(-1.0); });
 	}
 
 	void addDoubleControl(QVBoxLayout *layout, const char *labelText, QDoubleSpinBox *&box, const char *key,
