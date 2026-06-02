@@ -79,6 +79,8 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 extern "C" {
 const char *config_get_string(config_t *config, const char *section, const char *name);

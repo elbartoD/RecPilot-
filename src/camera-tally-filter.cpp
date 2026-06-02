@@ -31,6 +31,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <string>
+#include <utility>
 #include <vector>
 
 extern "C" {
