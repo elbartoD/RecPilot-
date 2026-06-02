@@ -40,16 +40,16 @@ if(ENABLE_QT)
   )
 endif()
 
-target_sources(
-  ${CMAKE_PROJECT_NAME}
-  PRIVATE src/camera-tally-filter.cpp src/plugin-main.cpp src/rec-trigger-dock.cpp
-)
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/camera-tally-filter.cpp src/plugin-main.cpp src/rec-trigger-dock.cpp)
 
 target_add_resource(${CMAKE_PROJECT_NAME} data/kofi_logo.png)
 
 if(APPLE)
   target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/macos-ocr.mm)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE "-framework Foundation" "-framework CoreGraphics" "-framework Vision")
+  target_link_libraries(
+    ${CMAKE_PROJECT_NAME}
+    PRIVATE "-framework Foundation" "-framework CoreGraphics" "-framework Vision"
+  )
 else()
   target_sources(${CMAKE_PROJECT_NAME} PRIVATE src/macos-ocr-stub.cpp)
 endif()
