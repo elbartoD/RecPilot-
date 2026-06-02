@@ -686,8 +686,8 @@ public:
 		coffeeReminderTimer->setSingleShot(true);
 		connect(coffeeReminderTimer, &QTimer::timeout, this, [this]() { showCoffeeDialog(true); });
 
-		QTimer::singleShot(250, this, [this]() { refreshTarget(); });
-		QTimer::singleShot(1000, this, [this]() {
+		QTimer::singleShot(1500, this, [this]() { refreshTarget(); });
+		QTimer::singleShot(2500, this, [this]() {
 			recordingOutputUpdatesReady = true;
 			refreshRecordingCodecAvailability();
 			if (pendingRecordingCodecApply && recordingCodec) {
