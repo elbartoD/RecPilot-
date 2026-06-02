@@ -37,6 +37,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QLayout>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -154,14 +155,19 @@ constexpr std::array<DetectionPreset, 6> BUILTIN_PRESETS = {{
 
 static QScrollArea *makePageScroll(QWidget *page)
 {
+	page->setMinimumHeight(0);
+	page->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
 	auto *scroll = new QScrollArea();
 	scroll->setWidgetResizable(true);
 	scroll->setFrameShape(QFrame::NoFrame);
 	scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 	scroll->setSizeAdjustPolicy(QAbstractScrollArea::AdjustIgnored);
 	scroll->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
+	scroll->setMinimumSize(0, 0);
 	scroll->setMinimumHeight(0);
 	scroll->setWidget(page);
+	scroll->viewport()->setMinimumHeight(0);
 	return scroll;
 }
 
@@ -170,7 +176,8 @@ public:
 	RecTriggerDock()
 	{
 		setObjectName("RecTriggerDock");
-		setMinimumWidth(220);
+		setMinimumSize(220, 0);
+		setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Ignored);
 		setStyleSheet(
 			"#RecTriggerDock { background: #17191f; color: #e8eaf0; }"
 			"QLabel#Status { color: #9aa3b2; }"
@@ -195,6 +202,7 @@ public:
 			"QSlider::handle:horizontal { width: 14px; margin: -5px 0; border-radius: 7px; background: #ff4d3d; }");
 
 		auto *root = new QVBoxLayout(this);
+		root->setSizeConstraint(QLayout::SetNoConstraint);
 		root->setContentsMargins(10, 10, 10, 10);
 		root->setSpacing(8);
 
@@ -234,6 +242,7 @@ public:
 		panel->setMinimumHeight(0);
 		panel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
 		auto *panelLayout = new QVBoxLayout(panel);
+		panelLayout->setSizeConstraint(QLayout::SetNoConstraint);
 		panelLayout->setContentsMargins(10, 10, 10, 10);
 		panelLayout->setSpacing(8);
 

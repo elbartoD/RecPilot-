@@ -177,6 +177,10 @@ jobs:
 
   ubuntu-build:
     name: Build for Ubuntu 🐧
+    # RecPilot currently ships as a macOS plugin: OCR is backed by Apple Vision and
+    # the dock workflow is validated against OBS macOS. Keep the Linux job around
+    # for future porting, but do not fail pushes on an unsupported target.
+    if: ${{ false }}
     strategy:
       matrix:
         os: [ubuntu-24.04]
@@ -251,6 +255,10 @@ jobs:
 
   windows-build:
     name: Build for Windows 🪟
+    # RecPilot currently ships as a macOS plugin: OCR is backed by Apple Vision and
+    # the dock workflow is validated against OBS macOS. Keep the Windows job around
+    # for future porting, but do not fail pushes on an unsupported target.
+    if: ${{ false }}
     runs-on: windows-2022
     needs: check-event
     defaults:
