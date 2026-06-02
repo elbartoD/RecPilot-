@@ -204,8 +204,8 @@ public:
 			"QPushButton#RecButton[recording=\"true\"] { background: #e62626; border: 2px solid #ffb3b3; color: #ffffff; }"
 			"QPushButton#RecButton[recording=\"false\"] { background: #303642; border: 2px solid #6a7280; color: #f2f3f5; }"
 			"QDoubleSpinBox, QSpinBox { background: #101218; border: 1px solid #394050; border-radius: 5px; padding: 3px; }"
-			"QPushButton#NudgeButton { min-width: 34px; max-width: 34px; min-height: 30px; max-height: 30px;"
-			"padding: 0; font-size: 15px; font-weight: 800; }"
+			"QPushButton#NudgeButton { min-width: 42px; max-width: 42px; min-height: 30px; max-height: 30px;"
+			"padding: 0; font-size: 13px; font-weight: 800; }"
 			"QPushButton#NudgeMode { min-width: 46px; max-width: 46px; min-height: 30px; max-height: 30px;"
 			"padding: 0; font-size: 12px; font-weight: 800; }"
 			"QPushButton#NudgeButton[ghost=\"true\"] { background: transparent; border-color: transparent; color: transparent; }"
@@ -4073,6 +4073,32 @@ private:
 		}
 	}
 
+	QString clipNameGrowText() const
+	{
+		switch (clipNameSizeMode) {
+		case ClipNameSizeMode::Horizontal:
+			return "← →";
+		case ClipNameSizeMode::Vertical:
+			return "↑↓";
+		case ClipNameSizeMode::Both:
+		default:
+			return "⤢";
+		}
+	}
+
+	QString clipNameShrinkText() const
+	{
+		switch (clipNameSizeMode) {
+		case ClipNameSizeMode::Horizontal:
+			return "→ ←";
+		case ClipNameSizeMode::Vertical:
+			return "↓↑";
+		case ClipNameSizeMode::Both:
+		default:
+			return "⤡";
+		}
+	}
+
 	void setDisplayDouble(QDoubleSpinBox *box, const char *key, double displayValue)
 	{
 		if (!box)
@@ -4146,14 +4172,14 @@ private:
 		auto *down = createNudgeButton("↓", "Move down");
 		auto *left = createNudgeButton("←", "Move left");
 		auto *right = createNudgeButton("→", "Move right");
-		auto *plus = createNudgeButton("+", "Increase detection radius");
-		auto *minus = createNudgeButton("-", "Decrease detection radius");
+		auto *grow = createNudgeButton("⤢", "Increase detection radius");
+		auto *shrink = createNudgeButton("⤡", "Decrease detection radius");
 
 		auto *sizeButtons = new QHBoxLayout();
 		sizeButtons->setContentsMargins(0, 0, 0, 0);
 		sizeButtons->setSpacing(4);
-		sizeButtons->addWidget(minus);
-		sizeButtons->addWidget(plus);
+		sizeButtons->addWidget(shrink);
+		sizeButtons->addWidget(grow);
 
 		grid->addWidget(up, 0, 2, Qt::AlignCenter);
 		grid->addWidget(left, 1, 1, Qt::AlignCenter);
@@ -4166,8 +4192,8 @@ private:
 		connect(down, &QPushButton::clicked, this, [this]() { nudgeDetectionCenter(0.0, 0.1); });
 		connect(left, &QPushButton::clicked, this, [this]() { nudgeDetectionCenter(-0.1, 0.0); });
 		connect(right, &QPushButton::clicked, this, [this]() { nudgeDetectionCenter(0.1, 0.0); });
-		connect(plus, &QPushButton::clicked, this, [this]() { nudgeDetectionRadius(1.0); });
-		connect(minus, &QPushButton::clicked, this, [this]() { nudgeDetectionRadius(-1.0); });
+		connect(grow, &QPushButton::clicked, this, [this]() { nudgeDetectionRadius(1.0); });
+		connect(shrink, &QPushButton::clicked, this, [this]() { nudgeDetectionRadius(-1.0); });
 	}
 
 	void addClipNameNudgePad(QVBoxLayout *layout)
@@ -4184,38 +4210,38 @@ private:
 		auto *left = createNudgeButton("←", "Move left");
 		auto *right = createNudgeButton("→", "Move right");
 		auto *mode = createNudgeModeButton();
-		auto *plus = createNudgeButton("+", "Increase clip name box");
-		auto *minus = createNudgeButton("-", "Decrease clip name box");
-		auto *verticalPlus = createNudgeButton("+", "Increase clip name height");
-		auto *verticalMinus = createNudgeButton("-", "Decrease clip name height");
+		auto *grow = createNudgeButton(clipNameGrowText(), "Increase clip name box");
+		auto *shrink = createNudgeButton(clipNameShrinkText(), "Decrease clip name box");
+		auto *verticalGrow = createNudgeButton("↑↓", "Increase clip name height");
+		auto *verticalShrink = createNudgeButton("↓↑", "Decrease clip name height");
 
 		auto *sizeButtons = new QHBoxLayout();
 		sizeButtons->setContentsMargins(0, 0, 0, 0);
 		sizeButtons->setSpacing(4);
-		sizeButtons->addWidget(minus);
+		sizeButtons->addWidget(shrink);
 		sizeButtons->addWidget(mode);
-		sizeButtons->addWidget(plus);
+		sizeButtons->addWidget(grow);
 
 		grid->addWidget(up, 0, 2, Qt::AlignCenter);
-		grid->addWidget(verticalPlus, 0, 3, Qt::AlignCenter);
+		grid->addWidget(verticalGrow, 0, 3, Qt::AlignCenter);
 		grid->addWidget(left, 1, 1, Qt::AlignCenter);
 		grid->addLayout(sizeButtons, 1, 2, Qt::AlignCenter);
 		grid->addWidget(right, 1, 3, Qt::AlignCenter);
 		grid->addWidget(down, 2, 2, Qt::AlignCenter);
-		grid->addWidget(verticalMinus, 2, 3, Qt::AlignCenter);
+		grid->addWidget(verticalShrink, 2, 3, Qt::AlignCenter);
 		layout->addLayout(grid);
 
-		auto refreshModeUi = [this, up, down, left, right, plus, minus, verticalPlus, verticalMinus]() {
+		auto refreshModeUi = [this, up, down, left, right, grow, shrink, verticalGrow, verticalShrink]() {
 			const bool horizontalOnly = clipNameSizeMode == ClipNameSizeMode::Horizontal;
 			const bool verticalOnly = clipNameSizeMode == ClipNameSizeMode::Vertical;
 			setNudgeGhost(up, horizontalOnly, "↑");
 			setNudgeGhost(down, horizontalOnly, "↓");
 			setNudgeGhost(left, verticalOnly, "←");
 			setNudgeGhost(right, verticalOnly, "→");
-			setNudgeGhost(plus, verticalOnly, "+");
-			setNudgeGhost(minus, verticalOnly, "-");
-			setNudgeGhost(verticalPlus, !verticalOnly, "+");
-			setNudgeGhost(verticalMinus, !verticalOnly, "-");
+			setNudgeGhost(grow, verticalOnly, clipNameGrowText());
+			setNudgeGhost(shrink, verticalOnly, clipNameShrinkText());
+			setNudgeGhost(verticalGrow, !verticalOnly, "↑↓");
+			setNudgeGhost(verticalShrink, !verticalOnly, "↓↑");
 		};
 		refreshModeUi();
 
@@ -4227,10 +4253,10 @@ private:
 			cycleClipNameSizeMode(mode);
 			refreshModeUi();
 		});
-		connect(plus, &QPushButton::clicked, this, [this]() { nudgeClipNameSize(1.0); });
-		connect(minus, &QPushButton::clicked, this, [this]() { nudgeClipNameSize(-1.0); });
-		connect(verticalPlus, &QPushButton::clicked, this, [this]() { nudgeClipNameSize(1.0); });
-		connect(verticalMinus, &QPushButton::clicked, this, [this]() { nudgeClipNameSize(-1.0); });
+		connect(grow, &QPushButton::clicked, this, [this]() { nudgeClipNameSize(1.0); });
+		connect(shrink, &QPushButton::clicked, this, [this]() { nudgeClipNameSize(-1.0); });
+		connect(verticalGrow, &QPushButton::clicked, this, [this]() { nudgeClipNameSize(1.0); });
+		connect(verticalShrink, &QPushButton::clicked, this, [this]() { nudgeClipNameSize(-1.0); });
 	}
 
 	void addDoubleControl(QVBoxLayout *layout, const char *labelText, QDoubleSpinBox *&box, const char *key,
